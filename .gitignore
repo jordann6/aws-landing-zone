@@ -5,3 +5,18 @@
 *.auto.tfvars
 venv/
 __pycache__/
+
+# --- platform-guardrails ---
+*.tfstate.*
+!example.tfvars
+tfplan
+plan.json
+crash.log
+.env
+.envrc
+kubeconfig
+*.kubeconfig
+*.pem
+*.ppk
+.checkov.json
+infracost.json
