@@ -61,3 +61,33 @@ variable "enable_identity_center" {
   type        = bool
   default     = true
 }
+
+# --- Reduced-footprint toggles -----------------------------------------------
+# The canonical landing zone deploys all of these (defaults true). In an org that
+# is at its account-count limit or already runs a shared Security Hub / cost
+# anomaly monitor, set the relevant flag false in terraform.tfvars to deploy the
+# governance core without the piece that cannot be created there.
+
+variable "full_account_set" {
+  description = "Create dev/test/prod/network/shared-services member accounts. Set false when the org has no account headroom; only security/log-archive/sandbox are created."
+  type        = bool
+  default     = true
+}
+
+variable "enable_securityhub" {
+  description = "Enable Security Hub (org admin, CIS 1.4.0). Set false where Security Hub is already enabled in the security account and managed elsewhere."
+  type        = bool
+  default     = true
+}
+
+variable "enable_cost_anomaly_monitor" {
+  description = "Create the Cost Explorer dimensional anomaly monitor. Set false where a SERVICE-dimension monitor already exists in the account (AWS allows only one)."
+  type        = bool
+  default     = true
+}
+
+variable "enable_tag_policy" {
+  description = "Attach the organization tag policy. Requires the TAG_POLICY type enabled on the org."
+  type        = bool
+  default     = true
+}

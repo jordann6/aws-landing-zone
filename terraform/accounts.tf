@@ -12,7 +12,12 @@ resource "aws_organizations_account" "sandbox" {
   }
 }
 
+# dev/test/prod/network/shared-services are gated by full_account_set. In a fresh
+# org with account headroom they all create (the canonical design). Where the org
+# is at its account-count limit, set full_account_set=false to deploy the
+# governance core plus the security, log-archive, and sandbox accounts only.
 resource "aws_organizations_account" "dev" {
+  count     = var.full_account_set ? 1 : 0
   name      = "dev"
   email     = replace(var.org_email_domain, "@", "+dev@")
   parent_id = aws_organizations_organizational_unit.dev.id
@@ -27,6 +32,7 @@ resource "aws_organizations_account" "dev" {
 }
 
 resource "aws_organizations_account" "test" {
+  count     = var.full_account_set ? 1 : 0
   name      = "test"
   email     = replace(var.org_email_domain, "@", "+test@")
   parent_id = aws_organizations_organizational_unit.test.id
@@ -41,6 +47,7 @@ resource "aws_organizations_account" "test" {
 }
 
 resource "aws_organizations_account" "prod" {
+  count     = var.full_account_set ? 1 : 0
   name      = "prod"
   email     = replace(var.org_email_domain, "@", "+prod@")
   parent_id = aws_organizations_organizational_unit.prod.id
@@ -75,6 +82,7 @@ resource "aws_organizations_account" "security" {
 # --- Infrastructure OU ---
 # network: Transit Gateway, egress/inspection VPC, Network Firewall, endpoints.
 resource "aws_organizations_account" "network" {
+  count     = var.full_account_set ? 1 : 0
   name      = "network"
   email     = replace(var.org_email_domain, "@", "+network@")
   parent_id = aws_organizations_organizational_unit.infrastructure.id
@@ -90,6 +98,7 @@ resource "aws_organizations_account" "network" {
 
 # shared-services: private DNS resolver, future golden-image pipeline, tooling.
 resource "aws_organizations_account" "shared_services" {
+  count     = var.full_account_set ? 1 : 0
   name      = "shared-services"
   email     = replace(var.org_email_domain, "@", "+shared-services@")
   parent_id = aws_organizations_organizational_unit.infrastructure.id

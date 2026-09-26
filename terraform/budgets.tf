@@ -30,17 +30,21 @@ resource "aws_budgets_budget" "monthly" {
   }
 }
 
+# AWS permits a single SERVICE-dimension anomaly monitor per account. Gated so the
+# zone can deploy where one already exists (set enable_cost_anomaly_monitor=false).
 resource "aws_ce_anomaly_monitor" "services" {
+  count             = var.enable_cost_anomaly_monitor ? 1 : 0
   name              = "org-service-anomalies"
   monitor_type      = "DIMENSIONAL"
   monitor_dimension = "SERVICE"
 }
 
 resource "aws_ce_anomaly_subscription" "services" {
+  count     = var.enable_cost_anomaly_monitor ? 1 : 0
   name      = "org-service-anomaly-alerts"
   frequency = "DAILY"
 
-  monitor_arn_list = [aws_ce_anomaly_monitor.services.arn]
+  monitor_arn_list = aws_ce_anomaly_monitor.services[*].arn
 
   subscriber {
     type    = "EMAIL"

@@ -8,7 +8,11 @@
 # This is the preventive twin of the FinOps OPA gate: OPA catches it at PR time
 # from the HCL, the tag policy catches it at runtime from any path (console, CLI,
 # a module the policy could not read statically).
+#
+# Gated by enable_tag_policy so the governance core can deploy where the tag
+# policy document or the TAG_POLICY type still needs work.
 resource "aws_organizations_policy" "tag_policy" {
+  count       = var.enable_tag_policy ? 1 : 0
   name        = "require-allocation-tags"
   description = "Require and constrain the cost-allocation tags across the org"
   type        = "TAG_POLICY"
@@ -19,6 +23,7 @@ resource "aws_organizations_policy" "tag_policy" {
 # exempt from SCPs by design but tag policies apply org-wide; that is fine, the
 # management account holds no tagged workloads.
 resource "aws_organizations_policy_attachment" "root_tag_policy" {
-  policy_id = aws_organizations_policy.tag_policy.id
+  count     = var.enable_tag_policy ? 1 : 0
+  policy_id = aws_organizations_policy.tag_policy[0].id
   target_id = aws_organizations_organization.org.roots[0].id
 }

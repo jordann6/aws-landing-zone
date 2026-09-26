@@ -16,18 +16,24 @@ locals {
   idc_instance_arn = local.idc_enabled ? tolist(data.aws_ssoadmin_instances.this[0].arns)[0] : ""
   identity_store   = local.idc_enabled ? tolist(data.aws_ssoadmin_instances.this[0].identity_store_ids)[0] : ""
 
-  # Account name -> id, for the assignment matrix.
-  accounts = {
-    management      = aws_organizations_organization.org.master_account_id
-    security        = aws_organizations_account.security.id
-    log_archive     = aws_organizations_account.log_archive.id
-    network         = aws_organizations_account.network.id
-    shared_services = aws_organizations_account.shared_services.id
-    dev             = aws_organizations_account.dev.id
-    test            = aws_organizations_account.test.id
-    prod            = aws_organizations_account.prod.id
-    sandbox         = aws_organizations_account.sandbox.id
-  }
+  # Account name -> id, for the assignment matrix. The gated accounts drop out
+  # when full_account_set is false, and the assignment matrix below filters to
+  # whatever accounts actually exist.
+  accounts = merge(
+    {
+      management  = aws_organizations_organization.org.master_account_id
+      security    = aws_organizations_account.security.id
+      log_archive = aws_organizations_account.log_archive.id
+      sandbox     = aws_organizations_account.sandbox.id
+    },
+    var.full_account_set ? {
+      network         = one(aws_organizations_account.network[*].id)
+      shared_services = one(aws_organizations_account.shared_services[*].id)
+      dev             = one(aws_organizations_account.dev[*].id)
+      test            = one(aws_organizations_account.test[*].id)
+      prod            = one(aws_organizations_account.prod[*].id)
+    } : {}
+  )
 
   # Persona -> permission set. session_duration caps the credential lifetime;
   # prod-touching and break-glass personas get the shortest, so elevated access
@@ -80,7 +86,7 @@ locals {
 
   # Representative persona-by-account assignments. The full matrix and the CIS
   # control each row satisfies live in docs/access-model.md.
-  assignments = {
+  assignments_all = {
     "platform-eng:dev"  = { persona = "platform-eng", account = "dev" }
     "platform-eng:test" = { persona = "platform-eng", account = "test" }
     "junior-eng:dev"    = { persona = "junior-eng", account = "dev" }
@@ -95,6 +101,13 @@ locals {
     "security:test"     = { persona = "security", account = "test" }
     "security:prod"     = { persona = "security", account = "prod" }
     "breakglass:mgmt"   = { persona = "break-glass", account = "management" }
+  }
+
+  # Only assign to accounts that exist in this deployment (full_account_set may
+  # gate dev/test/prod/network/shared-services off).
+  assignments = {
+    for k, v in local.assignments_all : k => v
+    if contains(keys(local.accounts), v.account)
   }
 }
 

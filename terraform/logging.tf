@@ -106,12 +106,17 @@ data "aws_iam_policy_document" "trail_bucket" {
     }
   }
 
-  # CloudTrail writes each account's logs under the org id prefix.
+  # CloudTrail writes member-account logs under the org-id prefix, and the
+  # management account's own logs (and the CreateTrail validation object) under
+  # its account-id prefix. An org trail needs both paths or CreateTrail fails.
   statement {
     sid       = "CloudTrailPutOrgObjects"
     effect    = "Allow"
     actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.trail.arn}/AWSLogs/${aws_organizations_organization.org.id}/*"]
+    resources = [
+      "${aws_s3_bucket.trail.arn}/AWSLogs/${aws_organizations_organization.org.id}/*",
+      "${aws_s3_bucket.trail.arn}/AWSLogs/${aws_organizations_organization.org.master_account_id}/*",
+    ]
     principals {
       type        = "Service"
       identifiers = ["cloudtrail.amazonaws.com"]

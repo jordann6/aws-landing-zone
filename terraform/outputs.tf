@@ -47,16 +47,18 @@ output "sandbox_account_id" {
   value = aws_organizations_account.sandbox.id
 }
 
+# dev/prod/test/network/shared-services exist only when full_account_set is true;
+# one(...) yields null when the account is gated off.
 output "dev_account_id" {
-  value = aws_organizations_account.dev.id
+  value = one(aws_organizations_account.dev[*].id)
 }
 
 output "prod_account_id" {
-  value = aws_organizations_account.prod.id
+  value = one(aws_organizations_account.prod[*].id)
 }
 
 output "test_account_id" {
-  value = aws_organizations_account.test.id
+  value = one(aws_organizations_account.test[*].id)
 }
 
 output "security_account_id" {
@@ -65,11 +67,11 @@ output "security_account_id" {
 
 output "network_account_id" {
   description = "Consumed by the network/ root to assume into this account"
-  value       = aws_organizations_account.network.id
+  value       = one(aws_organizations_account.network[*].id)
 }
 
 output "shared_services_account_id" {
-  value = aws_organizations_account.shared_services.id
+  value = one(aws_organizations_account.shared_services[*].id)
 }
 
 output "log_archive_account_id" {

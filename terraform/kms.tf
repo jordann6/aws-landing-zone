@@ -22,10 +22,12 @@ data "aws_iam_policy_document" "logging_key" {
 
   # CloudTrail encrypts each log file with a data key from this CMK. Scoped to the
   # organization trail in the management account so no other trail can use it.
+  # GenerateDataKey carries the trail ARN as encryption context, so it is gated on
+  # that context.
   statement {
     sid       = "AllowCloudTrailEncrypt"
     effect    = "Allow"
-    actions   = ["kms:GenerateDataKey*", "kms:DescribeKey"]
+    actions   = ["kms:GenerateDataKey*"]
     resources = ["*"]
     principals {
       type        = "Service"
@@ -35,6 +37,21 @@ data "aws_iam_policy_document" "logging_key" {
       test     = "StringLike"
       variable = "kms:EncryptionContext:aws:cloudtrail:arn"
       values   = ["arn:aws:cloudtrail:*:${aws_organizations_organization.org.master_account_id}:trail/*"]
+    }
+  }
+
+  # DescribeKey is called during CreateTrail validation with no encryption context
+  # and (pre-create) no reliable source ARN, so it cannot be gated on either;
+  # AWS's canonical CloudTrail key policy leaves it unconditioned. It is a
+  # metadata-only read. Without it, CreateTrail fails InsufficientEncryptionPolicy.
+  statement {
+    sid       = "AllowCloudTrailDescribeKey"
+    effect    = "Allow"
+    actions   = ["kms:DescribeKey"]
+    resources = ["*"]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudtrail.amazonaws.com"]
     }
   }
 
