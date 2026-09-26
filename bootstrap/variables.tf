@@ -31,6 +31,12 @@ variable "state_key_prefix" {
 # The environments that gate the write-scoped apply role. Only OIDC tokens minted
 # from a job bound to one of these environments can assume gha-apply, so the
 # required reviewer on the environment is the just-in-time-to-prod control.
+variable "create_github_oidc_provider" {
+  description = "Create the account-global GitHub OIDC provider. Leave false when it already exists in the account (another project owns it); set true in a fresh account."
+  type        = bool
+  default     = false
+}
+
 variable "apply_environments" {
   description = "GitHub environments allowed to assume the write-scoped apply role"
   type        = list(string)

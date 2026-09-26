@@ -35,7 +35,7 @@ data "aws_iam_policy_document" "plan_trust" {
     effect  = "Allow"
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [local.oidc_provider_arn]
     }
     condition {
       test     = "StringEquals"
@@ -97,7 +97,7 @@ data "aws_iam_policy_document" "apply_trust" {
     effect  = "Allow"
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [local.oidc_provider_arn]
     }
     condition {
       test     = "StringEquals"
