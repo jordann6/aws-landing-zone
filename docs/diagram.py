@@ -15,6 +15,9 @@ from diagrams.aws.storage import S3
 from diagrams.aws.network import TransitGateway, NATGateway, VPC, Endpoint, NetworkFirewall
 from diagrams.aws.general import Users
 from diagrams.aws.cost import CostExplorer
+from diagrams.aws.compute import EKS, EC2ContainerRegistry
+from diagrams.aws.database import RDS
+from diagrams.aws.storage import Backup
 
 graph_attr = {
     "fontsize": "20",
@@ -76,10 +79,20 @@ with Diagram(
         with Cluster("Sandbox OU"):
             sandbox = VPC("sandbox\n10.4/16")
 
+        with Cluster("Prod paved road (workload account)"):
+            eks = EKS("EKS\nprivate API, IRSA")
+            rds = RDS("RDS PostgreSQL\nMulti-AZ, CMK")
+            ecr = EC2ContainerRegistry("ECR\nscan + pull-through")
+            vault = Backup("Backup Vault Lock\n(WORM) + DR copy")
+            eks >> Edge(style="dotted", label="app only") >> rds
+            rds >> Edge(style="dashed", color="firebrick") >> vault
+
     # Relationships
     people >> Edge(label="SSO") >> idc
     org >> guardrails
     org >> idc
     [dev, test, prod, sandbox] >> Edge(color="darkgreen", label="spoke -> TGW") >> tgw
     [dev, test, prod, sandbox] >> Edge(style="dotted", color="gray") >> endpoints
+    prod >> Edge(label="paved road") >> eks
+    ecr >> Edge(style="dotted", color="gray", label="private pulls") >> endpoints
     prod >> Edge(style="dashed", color="firebrick", label="audit") >> trail

@@ -77,3 +77,24 @@ variable "backup_changeable_after_days" {
   type        = number
   default     = 3
 }
+
+variable "eks_version" {
+  description = "EKS Kubernetes version"
+  type        = string
+  default     = "1.30"
+}
+
+variable "eks_node_instance_type" {
+  description = "EKS managed node group instance type"
+  type        = string
+  default     = "t3.medium"
+}
+
+variable "upstream_registries" {
+  description = "Public registries fronted by an ECR pull-through cache (the only sanctioned pull path)"
+  type        = map(string)
+  default = {
+    "ecr-public" = "public.ecr.aws"
+    "quay"       = "quay.io"
+  }
+}
