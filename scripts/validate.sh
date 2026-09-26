@@ -8,7 +8,7 @@ echo "------------------------------------------------"
 echo "STARTING SCP GOVERNANCE VALIDATION"
 echo "------------------------------------------------"
 
-cd "$(dirname "$0")/terraform"
+cd "$(dirname "$0")/../terraform"
 
 MGMT_ACCOUNT_ID="$(terraform output -raw management_account_id)"
 SANDBOX_ACCOUNT_ID="$(terraform output -raw sandbox_account_id)"
@@ -62,13 +62,13 @@ echo -e "\n[1/7] Verifying Organization Structure..."
 OU_COUNT="$(aws organizations list-organizational-units-for-parent \
   --parent-id "$(terraform output -raw organization_root_id)" \
   --query 'length(OrganizationalUnits)' --output text)"
-check "Root has 3 top-level OUs (Security, Sandbox, Workloads)" "3" "$OU_COUNT"
+check "Root has 4 top-level OUs (Security, Infrastructure, Sandbox, Workloads)" "4" "$OU_COUNT"
 
 WORKLOADS_OU_ID="$(terraform output -raw workloads_ou_id)"
 CHILD_COUNT="$(aws organizations list-organizational-units-for-parent \
   --parent-id "$WORKLOADS_OU_ID" \
   --query 'length(OrganizationalUnits)' --output text)"
-check "Workloads OU has 2 child OUs (Dev, Prod)" "2" "$CHILD_COUNT"
+check "Workloads OU has 3 child OUs (Dev, Test, Prod)" "3" "$CHILD_COUNT"
 
 # ============================================================
 echo -e "\n[2/7] Verifying SCP Attachments..."

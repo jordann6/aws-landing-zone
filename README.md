@@ -1,124 +1,126 @@
-# AWS Organization SCP Governance
+# AWS Landing Zone
 
-Multi-account AWS Organization with a five-OU hierarchy and six Service Control Policies enforcing least-privilege guardrails at every level. SCPs are layered so child OUs inherit parent restrictions automatically, and the management account is exempt by design, matching how AWS evaluates SCPs in production. Three member accounts across Sandbox, Dev, and Prod OUs validate that each policy blocks what it should. All infrastructure provisioned in Terraform with an S3 remote backend, deployed via GitHub Actions OIDC.
-
-## Architecture
+A standalone, best-practice AWS landing zone built from bespoke Terraform: a
+multi-account AWS Organization with preventive guardrails, centralized logging
+and detective controls, federated human identity, and a centralized egress
+inspection network. It deploys, proves its own guardrails, and destroys back to a
+near-zero footprint.
 
 ![Architecture](docs/architecture.png)
 
-## OU Hierarchy
+## The problem it solves
 
-```
-Root
-├── Security OU
-├── Sandbox OU ─── sandbox account
-└── Workloads OU
-    ├── Dev OU ─── dev account
-    └── Prod OU ── prod account
-```
+A single AWS account with good intentions drifts. Someone turns off CloudTrail to
+quiet an alarm, a bucket goes public for a quick test and stays that way, a
+forgotten NAT gateway bills for a year, and the blast radius of one leaked
+credential is everything. This zone is the opposite posture: separate accounts
+per environment, guardrails applied at the org so they are inherited and cannot
+be turned off from inside a workload, one immutable place all the logs land, and
+one path to the internet that is inspected. The controls are preventive where a
+deny is possible, not just detective.
 
-## SCP Policy Library
+## How AWS differs from the Azure and GCP zones
 
-| Policy | Attached To | What It Enforces |
+All three zones build to the same design. The parts specific to AWS:
+
+- Isolation is by **account**, and the boundary is enforced by **SCPs** attached
+  to OUs, so a member account cannot escape a control by acting locally. Azure
+  uses Azure Policy at management-group scope; GCP uses org policies at the
+  folder or org root.
+- The management account is **SCP-exempt by design**, so the guardrails are
+  attached below it and root hardening on the management account is a separate,
+  documented step.
+- Centralized egress runs through a **Transit Gateway** and an inspection VPC
+  with **AWS Network Firewall**, shared to the org over RAM. Azure forces egress
+  through Azure Firewall with a UDR; GCP uses hierarchical firewall policies and
+  Cloud NAT.
+- Admin access is **SSM Session Manager** over interface endpoints. There is no
+  bastion and no public SSH.
+
+## What gets built
+
+Two Terraform roots. The governance root is nearly free and always on; the
+network root is the hourly-billed inspection layer, kept separate so it comes up
+only for its demo and is destroyed on its own.
+
+### Governance root (`terraform/`)
+
+| Pillar | Resources | Why |
 |---|---|---|
-| `deny-leave-org` | Root | Prevents any member account from calling `organizations:LeaveOrganization` |
-| `deny-root-user` | Root | Blocks all API actions by the root user in member accounts |
-| `region-lockdown` | Sandbox OU, Workloads OU | Denies all regional API calls outside `us-east-1`, with exceptions for global services (IAM, STS, Route 53, CloudFront, Organizations, etc.) |
-| `require-s3-encryption` | Workloads OU | Denies `s3:PutObject` when the server-side encryption header is missing or set to anything other than AES256 or aws:kms |
-| `deny-cloudtrail-tampering` | Prod OU | Denies `cloudtrail:StopLogging`, `cloudtrail:DeleteTrail`, and `cloudtrail:PutEventSelectors` |
-| `deny-public-s3` | Prod OU | Denies public bucket ACLs (`public-read`, `public-read-write`, `authenticated-read`) and prevents removal of the account-level S3 public access block |
+| Hierarchy | Security, Infrastructure, Workloads (Dev/Test/Prod), Sandbox OUs; security, network, shared-services, log-archive, test accounts | Separate accounts are the real isolation boundary; Prod sits under stricter inherited policy |
+| Guardrails | SCPs (deny root, deny leave-org, region lockdown, require S3 encryption, deny public S3, deny disabling detective services); org tag policy | Preventive, inherited, and unturnoffable from inside a workload |
+| Logging | Org CloudTrail to an Object-Lock (WORM) S3 bucket in log-archive, KMS-encrypted, log-file validation | One immutable record of what happened, safe from the account that generated it |
+| Detective | GuardDuty + Security Hub (CIS AWS Foundations 1.4.0) + AWS Config, delegated to the security account | Security operations run outside the account that can change the org |
+| Encryption | KMS CMK with rotation, key policy scoped to the CloudTrail/Config services | One key family controls the whole audit record |
+| Identity | IAM Identity Center personas (admin, platform-eng, junior-eng, manager, finops, security, break-glass) with permissions boundaries and short sessions | No IAM users; access is a group membership and a short session, no standing prod write |
+| Root hardening | Strict password policy; EventBridge alarm on any root use | The account nobody should log in with cannot be used quietly |
+| Cost | Monthly budget + Cost Anomaly Detection | Catches a forgotten hourly resource before the invoice does |
 
-## Effective Permissions by Account
+### Network root (`network/`)
 
-SCPs are evaluated as the **intersection** of every policy from root down to the account. A child account's effective permissions can never exceed what any ancestor OU allows.
+| Pillar | Resources | Why |
+|---|---|---|
+| Connectivity | Transit Gateway, RAM-shared to the org, explicit attachment acceptance | Spokes attach to reach the internet; no auto-join |
+| Inspection | Egress VPC, AWS Network Firewall (domain-allowlist default-deny), NAT, routing that forces egress and return through the firewall | Nothing reaches the internet without passing the firewall; the default-deny is what will enforce the pull-through cache |
+| Private access | Interface endpoints (SSM, ECR, Secrets Manager, Logs) + S3 gateway endpoint | Registry, secrets, and logging over private IPs; SSM gives admin access with no bastion |
+| Telemetry | VPC flow logs, firewall flow and alert logs to CloudWatch | A record of what traversed the hub |
 
-| Account | Effective Restrictions |
+## Deploy, test, destroy
+
+The credentialed operations run through the reviewer-gated CI (see the ADRs) or
+locally with admin credentials:
+
+```bash
+make deploy    # governance root, then the hourly network root (asks before the billing layer)
+make test      # proves the guardrails DENY, not just that apply succeeded
+make destroy   # tears both roots down, then verifies nothing hourly survives
+```
+
+- `make deploy` applies the governance root, then feeds its `network_account_id`
+  and `organization_arn` outputs into the network root.
+- `make test` runs `scripts/validate.sh` (the OU/SCP structure and live deny
+  checks: region lockdown, CloudTrail tampering, management exemption) and
+  `scripts/test-guardrails.sh` (org trail is logging, GuardDuty admin is the
+  security account, and disabling Config or GuardDuty in a workload returns
+  AccessDenied under the SCP).
+- `make destroy` destroys the network root, empties the Object-Lock buckets with
+  a governance-retention bypass, destroys the governance root, then runs
+  `scripts/verify-teardown.sh` to fail if any hourly resource remains.
+
+## Cost and teardown traps
+
+The guardrail and topology layer is nearly free. The cost risk is a forgotten
+hourly resource, which is exactly what the TTL guard and `verify-teardown.sh`
+exist to catch.
+
+| | Cost |
 |---|---|
-| **sandbox** | Cannot leave org, root user blocked, locked to us-east-1 |
-| **dev** | Cannot leave org, root user blocked, locked to us-east-1, S3 uploads require encryption header |
-| **prod** | Cannot leave org, root user blocked, locked to us-east-1, S3 uploads require encryption header, cannot tamper with CloudTrail, cannot set public S3 ACLs or remove public access block |
-| **management** | No SCP restrictions (exempt by design) |
+| Standing after destroy | ~$1 to $3/mo (KMS keys only, during their deletion window) |
+| Demo window (deploy, demo, destroy) | a few dollars, driven by NAT + Network Firewall while up |
 
-## Deploy
+Teardown traps this repo handles:
 
-```bash
-aws configure  # or use OIDC via GitHub Actions
+- **Object-Lock buckets.** The trail and config buckets use GOVERNANCE-mode WORM,
+  so `force_destroy` alone cannot empty them. `scripts/empty-locked-buckets.sh`
+  deletes each version with `--bypass-governance-retention` before the destroy.
+- **Order.** The network root is destroyed before the governance root, so the TGW
+  and inspection VPC release cleanly.
+- **What is allowed to remain.** A KMS key pending deletion (~$1/mo until its
+  window closes) is the only thing left standing, by design.
 
-cd terraform
-terraform init
-terraform apply -var="org_email_domain=you@example.com"
-```
+## Documentation
 
-The `org_email_domain` variable generates unique member account emails using `+` aliases (e.g., `you+sandbox@example.com`, `you+dev@example.com`, `you+prod@example.com`).
+- [docs/cis-mapping.md](docs/cis-mapping.md): CIS AWS Foundations control IDs
+  mapped to the exact Terraform resource or policy, with honest N/A rows.
+- [docs/access-model.md](docs/access-model.md): the persona-by-scope matrix and
+  the CIS control each row satisfies.
+- [docs/accelerator-vs-bespoke.md](docs/accelerator-vs-bespoke.md): why this is
+  hand-written Terraform rather than Control Tower or the Landing Zone Accelerator.
 
-## Validate
+## Pipeline
 
-The `validate.sh` script runs a seven-step end-to-end check: verifies the OU hierarchy structure, confirms all six SCPs are attached to the correct OUs, validates member account placement, assumes the `OrganizationAccountAccessRole` into each member account to test that denied actions return `AccessDenied`, and confirms the management account is SCP-exempt.
-
-```bash
-bash validate.sh
-```
-
-```
-[1/7] Verifying Organization Structure...
-  PASS: Root has 3 top-level OUs (Security, Sandbox, Workloads)
-  PASS: Workloads OU has 2 child OUs (Dev, Prod)
-
-[2/7] Verifying SCP Attachments...
-  PASS: deny-leave-org attached at root
-  PASS: deny-root-user attached at root
-  PASS: region-lockdown attached at Sandbox OU
-  PASS: deny-cloudtrail-tampering attached at Prod OU
-  PASS: deny-public-s3 attached at Prod OU
-
-[3/7] Verifying Member Account Placement...
-  PASS: Sandbox account is in Sandbox OU
-  PASS: Dev account is in Dev OU
-  PASS: Prod account is in Prod OU
-
-[4/7] Testing Region Lockdown (Sandbox Account)...
-  PASS: Sandbox: us-east-1 STS call allowed
-  PASS: Sandbox: us-west-2 SNS call denied
-
-[5/7] Testing Region Lockdown (Dev Account)...
-  PASS: Dev: us-west-2 SNS call denied
-  PASS: Dev: us-east-1 STS call allowed
-
-[6/7] Testing CloudTrail Tampering Deny (Prod Account)...
-  PASS: Prod: CloudTrail StopLogging denied
-  PASS: Prod: CloudTrail DeleteTrail denied
-
-[7/7] Testing Management Account SCP Exemption...
-  PASS: Management account: us-west-2 call succeeds (SCP exempt)
-
-VALIDATION COMPLETE
-  Passed: 15
-  Failed: 0
-```
-
-## Tear Down
-
-```bash
-cd terraform
-terraform destroy -var="org_email_domain=you@example.com"
-```
-
-Member accounts are created with `close_on_deletion = true`, so `terraform destroy` initiates account closure automatically. The organization and all OUs are removed in the same operation.
-
-## Infrastructure
-
-| Resource | Count |
-|---|---|
-| AWS Organization | 1 |
-| Organizational Units | 5 (Security, Sandbox, Workloads, Dev, Prod) |
-| Service Control Policies | 6 |
-| SCP Attachments | 7 (2 root + 1 Sandbox + 2 Workloads + 2 Prod) |
-| Member Accounts | 3 (sandbox, dev, prod) |
-| Terraform State | S3 backend |
-
-## Key Concepts
-
-- **SCPs are guardrails, not grants.** They set the maximum permission boundary. An SCP that allows EC2 does not grant EC2 access; it means IAM policies in that account *can* grant EC2 if they choose to.
-- **Inheritance is intersection.** The effective boundary for an account is the intersection of every SCP from root down through each parent OU. A deny at any level in the chain wins.
-- **Management account is always exempt.** SCPs attached at root or any OU never restrict the management account, even explicit denies. This is by AWS design, not a misconfiguration.
-- **Deny always wins.** If any SCP in the chain denies an action, no IAM policy in the account can override it.
+CI runs the shared [platform-guardrails](https://github.com/jordann6/platform-guardrails)
+reusable workflows: credential-free static gates (gitleaks, fmt/validate,
+tflint, Checkov, Trivy, conftest OPA) on both roots, an OIDC-authenticated plan
+with a destroy guard, a reviewer-gated apply, and a scheduled TTL guard that
+alarms if an hourly resource is ever left standing.
