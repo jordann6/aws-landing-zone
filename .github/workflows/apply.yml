@@ -9,7 +9,7 @@ name: Apply (gated)
 #   1. bootstrap roles applied (gha-plan, gha-apply)
 #   2. platform-guardrails v1.3.0 pushed
 #   3. a `prod-apply` GitHub environment with a required reviewer
-#   4. <MGMT_ACCOUNT_ID> replaced below (bootstrap outputs)
+#   4. 692859913278 replaced below (bootstrap outputs)
 #   5. add the real trigger (push to main) and remove this notice
 #
 # Kept on workflow_dispatch only for now so it never auto-fires before the roles
@@ -32,6 +32,6 @@ jobs:
     with:
       terraform_dir: terraform
       environment: prod-apply
-      plan_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-plan
-      apply_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-apply
+      plan_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1

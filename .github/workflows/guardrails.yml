@@ -57,10 +57,10 @@ jobs:
   #     INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
 
   # Credentialed read: plan + destroy guard + cost diff, OIDC only.
-  # ACTIVATE after `terraform -chdir=bootstrap apply` creates the role: replace
-  # <MGMT_ACCOUNT_ID> with the management account id (bootstrap output
-  # `plan_role_arn`) and uncomment. Permissions sit on the job, never hoisted to
-  # file level, so the static job can never hold an OIDC token.
+  # The gha-plan role now exists and its ARN is filled in below. ACTIVATE by
+  # uncommenting to run a credentialed plan on every PR/push. Permissions sit on
+  # the job, never hoisted to file level, so the static job can never hold an
+  # OIDC token.
   #
   # plan:
   #   permissions:
@@ -70,7 +70,7 @@ jobs:
   #   uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@v1.3.0
   #   with:
   #     terraform_dir: terraform
-  #     aws_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-plan
+  #     aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
   #     aws_region: us-east-1
   #     enable_infracost: false
   #   secrets:

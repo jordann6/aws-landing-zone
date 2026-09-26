@@ -12,7 +12,7 @@ name: Destroy (manual teardown)
 #   1. bootstrap role applied (gha-apply, which has destroy rights)
 #   2. platform-guardrails v1.3.0 pushed
 #   3. a `destroy` GitHub environment with a required reviewer
-#   4. <MGMT_ACCOUNT_ID> replaced below
+#   4. 692859913278 replaced below
 on:
   workflow_dispatch:
 
@@ -28,6 +28,6 @@ jobs:
     with:
       terraform_dir: terraform
       environment: destroy
-      aws_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-apply
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       check_only: false

@@ -13,7 +13,7 @@ name: TTL guard
 # INACTIVE until Phase-1 activation:
 #   1. bootstrap role applied (gha-plan)
 #   2. platform-guardrails v1.3.0 pushed
-#   3. <MGMT_ACCOUNT_ID> replaced below
+#   3. 692859913278 replaced below
 #   4. uncomment the schedule trigger
 on:
   workflow_dispatch:
@@ -32,6 +32,6 @@ jobs:
     uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@v1.3.0
     with:
       terraform_dir: terraform
-      aws_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-plan
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
       check_only: true
