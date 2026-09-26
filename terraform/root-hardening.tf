@@ -16,6 +16,7 @@ resource "aws_iam_account_password_policy" "strict" {
   hard_expiry                    = false
 }
 
+#trivy:ignore:AVD-AWS-0136:AWS-managed SNS key in the demo; a CMK for the alert topic is the production upgrade.
 resource "aws_sns_topic" "security_alerts" {
   name              = "security-alerts"
   kms_master_key_id = "alias/aws/sns"

@@ -22,6 +22,7 @@ resource "aws_s3_bucket" "config" {
   tags          = { Name = local.config_bucket_name }
 }
 
+#trivy:ignore:AVD-AWS-0132:SSE-S3 by design here to avoid a cross-account KMS grant for the Config delivery role; CMK is the production upgrade.
 resource "aws_s3_bucket_server_side_encryption_configuration" "config" {
   provider = aws.log_archive
   bucket   = aws_s3_bucket.config.id
