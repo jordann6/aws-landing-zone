@@ -10,12 +10,17 @@ on:
 # whoever opened the PR, so nothing here holds a permission that can mint a
 # cloud token. The credentialed `plan` job below carries its own scoped
 # permissions on the job, never at file level.
+# Version pins: the jobs in this file (tf-ci, and the commented tf-plan +
+# finops-gate) reference workflows unchanged as of v1.2.0, so they pin there and
+# CI is green today. The new apply/destroy/ttl-guard workflows exist only in
+# v1.3.0 (platform-guardrails#1) and are pinned there in their own files.
+# ACTIVATION: once v1.3.0 is tagged, bump every pin in this repo to v1.3.0.
 permissions:
   contents: read
 
 jobs:
   static:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.3.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.2.0
     with:
       terraform_dir: terraform
       # No baseline: this repo's static gates are green as-is. Add one only if a
@@ -28,7 +33,7 @@ jobs:
   # ACTIVATE: add the repo secret, then uncomment.
   #
   # finops:
-  #   uses: jordann6/platform-guardrails/.github/workflows/finops-gate.yml@v1.3.0
+  #   uses: jordann6/platform-guardrails/.github/workflows/finops-gate.yml@v1.2.0
   #   permissions:
   #     contents: read
   #     pull-requests: write
@@ -50,7 +55,7 @@ jobs:
   #     contents: read
   #     id-token: write
   #     pull-requests: write
-  #   uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@v1.3.0
+  #   uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@v1.2.0
   #   with:
   #     terraform_dir: terraform
   #     aws_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-plan
