@@ -27,6 +27,13 @@ jobs:
       # future change introduces findings that must be ratcheted down over time:
       # checkov_baseline: .checkov.baseline
 
+  # The network/ root is a separate root module (the timed inspection layer), so
+  # it gets its own static gate.
+  static_network:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.2.0
+    with:
+      terraform_dir: network
+
   # The FinOps allocation policy (CostCenter) already runs inside `static`, since
   # tf-ci.yml evaluates the whole shared policy/ set. The cost *threshold* needs
   # the INFRACOST_API_KEY secret, so it stays commented until that secret exists.
