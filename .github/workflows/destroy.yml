@@ -1,0 +1,33 @@
+name: Destroy (manual teardown)
+
+# Manual teardown: terraform destroy, then a post-destroy check that fails if any
+# hourly-billed resource survived (the section-8 teardown verification). Gated by
+# the `destroy` environment so a teardown is a recorded, approved act.
+#
+# For this repo today the destroy closes the member accounts (close_on_deletion)
+# and removes the org scaffold; there are no hourly resources yet, so the guard
+# passes trivially. It starts mattering in Phase 2 (NAT + Network Firewall).
+#
+# INACTIVE until Phase-1 activation:
+#   1. bootstrap role applied (gha-apply, which has destroy rights)
+#   2. platform-guardrails v1.3.0 pushed
+#   3. a `destroy` GitHub environment with a required reviewer
+#   4. <MGMT_ACCOUNT_ID> replaced below
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  destroy:
+    permissions:
+      contents: read
+      id-token: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@v1.3.0
+    with:
+      terraform_dir: terraform
+      environment: destroy
+      aws_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-apply
+      aws_region: us-east-1
+      check_only: false

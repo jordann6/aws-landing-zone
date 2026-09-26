@@ -1,0 +1,37 @@
+name: Apply (gated)
+
+# Reviewer-gated apply: the just-in-time-to-prod control in CI. Plans read-only,
+# runs the destroy guard, then pauses on the `prod-apply` environment for a
+# required reviewer before applying the exact saved plan with a write-scoped
+# role. See tf-apply.yml in platform-guardrails.
+#
+# INACTIVE until Phase-1 activation:
+#   1. bootstrap roles applied (gha-plan, gha-apply)
+#   2. platform-guardrails v1.3.0 pushed
+#   3. a `prod-apply` GitHub environment with a required reviewer
+#   4. <MGMT_ACCOUNT_ID> replaced below (bootstrap outputs)
+#   5. add the real trigger (push to main) and remove this notice
+#
+# Kept on workflow_dispatch only for now so it never auto-fires before the roles
+# exist. A manual dispatch with placeholder ARNs fails cleanly, which is fine.
+on:
+  workflow_dispatch:
+  # ACTIVATE: apply on merge to main.
+  # push:
+  #   branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    permissions:
+      contents: read
+      id-token: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@v1.3.0
+    with:
+      terraform_dir: terraform
+      environment: prod-apply
+      plan_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-plan
+      apply_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-apply
+      aws_region: us-east-1

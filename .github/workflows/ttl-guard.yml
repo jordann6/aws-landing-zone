@@ -1,0 +1,37 @@
+name: TTL guard
+
+# Scheduled watch for a forgotten teardown. In check_only mode it reads live
+# state and fails if any hourly-billed resource is still standing; the red
+# scheduled run and its notification are the alarm. It changes nothing (uses the
+# read-scoped gha-plan role). Flip auto_destroy on in tf-destroy.yml only if you
+# want a tripped guard to tear down on its own.
+#
+# For this repo today there are no hourly resources, so the guard is green until
+# Phase 2 adds NAT + Network Firewall. Wiring it now means the alarm exists
+# before the first billable resource does.
+#
+# INACTIVE until Phase-1 activation:
+#   1. bootstrap role applied (gha-plan)
+#   2. platform-guardrails v1.3.0 pushed
+#   3. <MGMT_ACCOUNT_ID> replaced below
+#   4. uncomment the schedule trigger
+on:
+  workflow_dispatch:
+  # ACTIVATE: hourly check for standing billable resources.
+  # schedule:
+  #   - cron: "0 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  ttl:
+    permissions:
+      contents: read
+      id-token: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@v1.3.0
+    with:
+      terraform_dir: terraform
+      aws_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-plan
+      aws_region: us-east-1
+      check_only: true

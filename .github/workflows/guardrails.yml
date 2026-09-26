@@ -1,0 +1,60 @@
+name: Guardrails
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The static half is credential-free by design. Everything in the `static` job
+# runs analysis over Terraform that, on a pull_request event, was authored by
+# whoever opened the PR, so nothing here holds a permission that can mint a
+# cloud token. The credentialed `plan` job below carries its own scoped
+# permissions on the job, never at file level.
+permissions:
+  contents: read
+
+jobs:
+  static:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.3.0
+    with:
+      terraform_dir: terraform
+      # No baseline: this repo's static gates are green as-is. Add one only if a
+      # future change introduces findings that must be ratcheted down over time:
+      # checkov_baseline: .checkov.baseline
+
+  # The FinOps allocation policy (CostCenter) already runs inside `static`, since
+  # tf-ci.yml evaluates the whole shared policy/ set. The cost *threshold* needs
+  # the INFRACOST_API_KEY secret, so it stays commented until that secret exists.
+  # ACTIVATE: add the repo secret, then uncomment.
+  #
+  # finops:
+  #   uses: jordann6/platform-guardrails/.github/workflows/finops-gate.yml@v1.3.0
+  #   permissions:
+  #     contents: read
+  #     pull-requests: write
+  #   with:
+  #     terraform_dir: terraform
+  #     max_monthly_increase: "50"
+  #     fail_on_cost: true
+  #   secrets:
+  #     INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+
+  # Credentialed read: plan + destroy guard + cost diff, OIDC only.
+  # ACTIVATE after `terraform -chdir=bootstrap apply` creates the role: replace
+  # <MGMT_ACCOUNT_ID> with the management account id (bootstrap output
+  # `plan_role_arn`) and uncomment. Permissions sit on the job, never hoisted to
+  # file level, so the static job can never hold an OIDC token.
+  #
+  # plan:
+  #   permissions:
+  #     contents: read
+  #     id-token: write
+  #     pull-requests: write
+  #   uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@v1.3.0
+  #   with:
+  #     terraform_dir: terraform
+  #     aws_role_arn: arn:aws:iam::<MGMT_ACCOUNT_ID>:role/gha-plan
+  #     aws_region: us-east-1
+  #     enable_infracost: false
+  #   secrets:
+  #     INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
