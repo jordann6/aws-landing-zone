@@ -6,7 +6,6 @@
         "@@assign": [
           "ec2:instance",
           "ec2:volume",
-          "rds:db",
           "s3:bucket"
         ]
       }
