@@ -42,6 +42,13 @@ resource "aws_organizations_policy" "deny_public_s3" {
   content     = file("${path.module}/policies/deny-public-s3.json")
 }
 
+resource "aws_organizations_policy" "deny_disable_detective" {
+  name        = "deny-disable-detective"
+  description = "Prevent disabling Config, GuardDuty, Security Hub, or Access Analyzer"
+  type        = "SERVICE_CONTROL_POLICY"
+  content     = file("${path.module}/policies/deny-disable-detective.json")
+}
+
 # --- Root-level attachments (all member accounts) ---
 
 resource "aws_organizations_policy_attachment" "root_deny_leave_org" {
@@ -52,6 +59,24 @@ resource "aws_organizations_policy_attachment" "root_deny_leave_org" {
 resource "aws_organizations_policy_attachment" "root_deny_root_user" {
   policy_id = aws_organizations_policy.deny_root_user.id
   target_id = aws_organizations_organization.org.roots[0].id
+}
+
+# Detective services are org-wide, so the "do not turn them off" guard is too.
+resource "aws_organizations_policy_attachment" "root_deny_disable_detective" {
+  policy_id = aws_organizations_policy.deny_disable_detective.id
+  target_id = aws_organizations_organization.org.roots[0].id
+}
+
+# --- Infrastructure OU (network, shared-services, log-archive) ---
+
+resource "aws_organizations_policy_attachment" "infrastructure_region_lockdown" {
+  policy_id = aws_organizations_policy.region_lockdown.id
+  target_id = aws_organizations_organizational_unit.infrastructure.id
+}
+
+resource "aws_organizations_policy_attachment" "infrastructure_require_s3_encryption" {
+  policy_id = aws_organizations_policy.require_s3_encryption.id
+  target_id = aws_organizations_organizational_unit.infrastructure.id
 }
 
 # --- Sandbox OU ---
