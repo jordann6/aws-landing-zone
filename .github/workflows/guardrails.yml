@@ -34,6 +34,12 @@ jobs:
     with:
       terraform_dir: network
 
+  # The workload/ root is the paved-road prod tier (data + EKS), also timed.
+  static_workload:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.2.0
+    with:
+      terraform_dir: workload
+
   # The FinOps allocation policy (CostCenter) already runs inside `static`, since
   # tf-ci.yml evaluates the whole shared policy/ set. The cost *threshold* needs
   # the INFRACOST_API_KEY secret, so it stays commented until that secret exists.
