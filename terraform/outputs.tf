@@ -2,6 +2,11 @@ output "organization_id" {
   value = aws_organizations_organization.org.id
 }
 
+output "organization_arn" {
+  description = "Consumed by the network/ root to share the TGW to the org via RAM"
+  value       = aws_organizations_organization.org.arn
+}
+
 output "organization_root_id" {
   value = aws_organizations_organization.org.roots[0].id
 }
