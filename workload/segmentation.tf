@@ -10,6 +10,7 @@ locals {
   db_port   = 5432
 }
 
+#trivy:ignore:AVD-AWS-0104:Egress to 0.0.0.0/0 on 443 is intentional; the hub Network Firewall (not this SG) enforces the destination allowlist.
 resource "aws_security_group" "app" {
   #checkov:skip=CKV2_AWS_5:Attached by the app/EKS workload tier in Phase 6; referenced here by the DB ingress rule.
   name        = "prod-app"
