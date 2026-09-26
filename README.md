@@ -65,6 +65,17 @@ only for its demo and is destroyed on its own.
 | Private access | Interface endpoints (SSM, ECR, Secrets Manager, Logs) + S3 gateway endpoint | Registry, secrets, and logging over private IPs; SSM gives admin access with no bastion |
 | Telemetry | VPC flow logs, firewall flow and alert logs to CloudWatch | A record of what traversed the hub |
 
+### Workload root (`workload/`), the prod paved road
+
+| Pillar | Resources | Why |
+|---|---|---|
+| Prod VPC | Private VPC (10.3.0.0/16), no IGW/NAT, TGW-attached; egress inherits the hub firewall | A workload account with no independent path to the internet |
+| Data segmentation | App and DB security groups (only the app tier reaches the DB on 5432) + a data-subnet NACL | Least-access data tier; see the who-can-talk-to-whom matrix in the data-tier doc |
+| Database | RDS PostgreSQL, Multi-AZ, gp3, CMK-encrypted, private, RDS-managed secret | Active-passive failover, no password in state |
+| Backup | AWS Backup Vault Lock (WORM) + cross-region copy | Immutable backups, a defense against ransomware not just failure |
+| Cluster | EKS with a private API, KMS-encrypted etcd secrets, IRSA | Pods get scoped IAM, no node-wide keys, no public control plane |
+| Supply chain | ECR (immutable tags, scan-on-push) + pull-through cache + Inspector; EC2 Image Builder | Private registry as the only image source; hardened node AMIs |
+
 ## Deploy, test, destroy
 
 The credentialed operations run through the reviewer-gated CI (see the ADRs) or
@@ -96,7 +107,8 @@ exist to catch.
 | | Cost |
 |---|---|
 | Standing after destroy | ~$1 to $3/mo (KMS keys only, during their deletion window) |
-| Demo window (deploy, demo, destroy) | a few dollars, driven by NAT + Network Firewall while up |
+| Demo window, governance + network | a few dollars, driven by NAT + Network Firewall while up |
+| Demo window, workload | adds RDS Multi-AZ + EKS control plane + endpoints while up; destroy the workload root as soon as its demo is done |
 
 Teardown traps this repo handles:
 
@@ -116,6 +128,8 @@ Teardown traps this repo handles:
   the CIS control each row satisfies.
 - [docs/accelerator-vs-bespoke.md](docs/accelerator-vs-bespoke.md): why this is
   hand-written Terraform rather than Control Tower or the Landing Zone Accelerator.
+- [docs/data-tier.md](docs/data-tier.md): the data-tier segmentation matrix, the
+  RTO/RPO of the failover, backup immutability, and the EKS paved road.
 
 ## Pipeline
 

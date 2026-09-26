@@ -8,10 +8,10 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-HOURLY='aws_nat_gateway|aws_networkfirewall_firewall|aws_vpc_endpoint|aws_ec2_transit_gateway|aws_db_instance|aws_rds_cluster|aws_eks_cluster|aws_instance|aws_lb'
+HOURLY='aws_nat_gateway|aws_networkfirewall_firewall|aws_vpc_endpoint|aws_ec2_transit_gateway|aws_db_instance|aws_rds_cluster|aws_eks_cluster|aws_eks_node_group|aws_instance|aws_lb'
 
 fail=0
-for dir in terraform network; do
+for dir in terraform network workload; do
   echo "==> $dir"
   state="$(terraform -chdir="$ROOT/$dir" state list 2>/dev/null || true)"
   if [[ -z "$state" ]]; then

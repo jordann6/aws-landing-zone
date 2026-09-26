@@ -60,6 +60,23 @@ view; this table is the design-time intent behind that score.
 | 5.3 | Default security group restricts all traffic | `aws_default_security_group.hub` (no rules) |
 | 5.4 | Routing tables least access | Inspection routing (`routing.tf`) forces all egress and return traffic through the firewall |
 
+## Data tier and workload (Phase 5/6)
+
+| Control | Implemented by |
+|---|---|
+| RDS encryption at rest with CMK | `aws_db_instance.prod` (`storage_encrypted`, `kms_key_id`) |
+| RDS not publicly accessible | `aws_db_instance.prod` (`publicly_accessible = false`), private subnets, no IGW/NAT |
+| RDS credential not in code | `manage_master_user_password` (RDS-managed secret in Secrets Manager) |
+| Database reachable only from the app tier | `aws_security_group.db` ingress from the app SG only, plus the data NACL |
+| Immutable backups | `aws_backup_vault_lock_configuration.prod` (WORM), cross-region copy |
+| EKS secrets encrypted in etcd | `aws_eks_cluster.prod` `encryption_config` with a CMK |
+| EKS private control plane | `aws_eks_cluster.prod` (`endpoint_public_access = false`) |
+| Pod-scoped IAM, no static keys | IRSA via `aws_iam_openid_connect_provider.eks` (`irsa.tf`) |
+| EKS control-plane audit logging | `aws_eks_cluster.prod` `enabled_cluster_log_types` |
+| Image scanning | ECR scan-on-push + Inspector enhanced scanning (`ecr.tf`) |
+| Only private registry pulls | No internet path + hub firewall allowlist; pull-through cache mirrors into ECR |
+| Hardened node image | EC2 Image Builder pipeline (`imagebuilder.tf`) |
+
 ## Preventive controls beyond CIS scoring
 
 The SCPs enforce several controls preventively that CIS only checks detectively:
