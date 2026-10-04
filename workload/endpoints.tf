@@ -11,6 +11,7 @@ locals {
     "ec2",
     "elasticloadbalancing",
     "logs",
+    "monitoring", # CloudWatch metrics API for the Container Insights agent
     "eks",
     "ssm",
     "ssmmessages",

@@ -39,10 +39,10 @@ All three zones build to the same design. The parts specific to AWS:
 
 ## What gets built
 
-Four Terraform roots. The accounts root is permanent and free. The governance
-root is nearly free and comes and goes with each demo. The network and workload
-roots are the hourly-billed layers, kept separate so they come up only for their
-demo and are destroyed on their own.
+Five Terraform roots. The accounts root is permanent and free. The governance
+and observability roots are nearly free and come and go with each demo. The
+network and workload roots are the hourly-billed layers, kept separate so they
+come up only for their demo and are destroyed on their own.
 
 ### Accounts root (`accounts/`), permanent
 
@@ -87,6 +87,20 @@ ids from this root's state.
 | Backup | AWS Backup Vault Lock (WORM) + cross-region copy | Immutable backups, a defense against ransomware not just failure |
 | Cluster | EKS with a private API, KMS-encrypted etcd secrets, IRSA | Pods get scoped IAM, no node-wide keys, no public control plane |
 | Supply chain | ECR (immutable tags, scan-on-push) + pull-through cache + Inspector; EC2 Image Builder | Private registry as the only image source; hardened node AMIs |
+| Workload metrics | Container Insights (`amazon-cloudwatch-observability` add-on) on an IRSA role, plus a `monitoring` endpoint | Node and pod health as CloudWatch metrics, alarmed centrally ([ADR-0002](docs/adr/0002-eks-metrics-container-insights.md)) |
+
+### Observability root (`observability/`)
+
+| Pillar | Resources | Why |
+|---|---|---|
+| Finding routing | EventBridge rules in the security account: GuardDuty severity 7+ and Security Hub HIGH/CRITICAL (GuardDuty duplicates excluded) to a `security-findings` topic | Every serious finding in the org lands in one place a runbook can subscribe to |
+| Monitoring account | Shared-services holds a CloudWatch OAM sink; prod and network link to it with metrics, logs, and traces | Alarms and dashboards live where no workload team can change them, while data stays in the account that produced it |
+| Central alarms | RDS CPU and free storage, EKS failed nodes, Network Firewall dropped packets, AWS Backup failed jobs, each reading its source account through OAM, to an `ops-alarms` topic on ALARM and OK | One alarm plane and one input for the incident responder |
+| Encryption | A customer-managed KMS key per alert topic, granting only EventBridge or CloudWatch for that topic | Neither service can publish to a topic under the AWS-managed `aws/sns` key |
+
+`make test-observability` raises a GuardDuty sample finding and checks the
+publish, confirms both source accounts' metrics are visible in the monitoring
+account, and forces an alarm to confirm its SNS action succeeds.
 
 ## Deploy, test, destroy
 

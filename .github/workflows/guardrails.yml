@@ -45,22 +45,53 @@ jobs:
     with:
       terraform_dir: workload
 
+  # The observability/ root: finding routing, the OAM monitoring account, and
+  # the central alarms.
+  static_observability:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.4.0
+    with:
+      terraform_dir: observability
+
   # The FinOps allocation policy (CostCenter) already runs inside `static`, since
-  # tf-ci.yml evaluates the whole shared policy/ set. The cost *threshold* needs
-  # the INFRACOST_API_KEY secret, so it stays commented until that secret exists.
-  # ACTIVATE: add the repo secret, then uncomment.
-  #
-  # finops:
-  #   uses: jordann6/platform-guardrails/.github/workflows/finops-gate.yml@v1.4.0
-  #   permissions:
-  #     contents: read
-  #     pull-requests: write
-  #   with:
-  #     terraform_dir: terraform
-  #     max_monthly_increase: "50"
-  #     fail_on_cost: true
-  #   secrets:
-  #     INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+  # tf-ci.yml evaluates the whole shared policy/ set. These jobs add the cost
+  # *threshold*: a PR that raises a billable root's projected monthly cost by more
+  # than max_monthly_increase fails unless labeled cost-approved. One job per
+  # root that bills; the governance root is effectively free.
+  finops_network:
+    uses: jordann6/platform-guardrails/.github/workflows/finops-gate.yml@v1.4.0
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      terraform_dir: network
+      max_monthly_increase: "50"
+      fail_on_cost: true
+    secrets:
+      INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+
+  finops_workload:
+    uses: jordann6/platform-guardrails/.github/workflows/finops-gate.yml@v1.4.0
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      terraform_dir: workload
+      max_monthly_increase: "50"
+      fail_on_cost: true
+    secrets:
+      INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+
+  finops_observability:
+    uses: jordann6/platform-guardrails/.github/workflows/finops-gate.yml@v1.4.0
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      terraform_dir: observability
+      max_monthly_increase: "50"
+      fail_on_cost: true
+    secrets:
+      INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
 
   # Credentialed read: plan + destroy guard + cost diff, OIDC only.
   # The gha-plan role now exists and its ARN is filled in below. ACTIVATE by

@@ -33,6 +33,11 @@ resource "aws_securityhub_organization_admin_account" "this" {
 resource "aws_securityhub_account" "security" {
   count    = var.enable_securityhub ? 1 : 0
   provider = aws.security
+
+  # CIS 1.4.0 (below) is the scored standard, so the account does not
+  # auto-subscribe the defaults. Explicit because the attribute forces
+  # replacement, and an imported account reads back false.
+  enable_default_standards = false
 }
 
 # The scored CIS standard: this is the compliance target the whole zone is graded
