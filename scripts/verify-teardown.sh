@@ -29,9 +29,21 @@ for dir in terraform network workload; do
   fi
 done
 
+# Accounts are permanent (accounts/ root). A teardown that closed one would leave
+# it SUSPENDED for 90 days, holding quota and its email alias.
+echo "==> member accounts"
+if ! closed="$(aws organizations list-accounts --query 'Accounts[?Status!=`ACTIVE`].Name' --output text 2>/dev/null)"; then
+  echo "  could not list accounts (no org credentials). SKIPPED"
+elif [[ -n "$closed" ]]; then
+  echo "  accounts not ACTIVE: $closed"
+  fail=1
+else
+  echo "  all member accounts ACTIVE. OK"
+fi
+
 if [[ $fail -ne 0 ]]; then
   echo ""
-  echo "verify-teardown: FAILED. Something billable is still standing."
+  echo "verify-teardown: FAILED. Something billable is still standing, or an account was closed."
   exit 1
 fi
 echo ""

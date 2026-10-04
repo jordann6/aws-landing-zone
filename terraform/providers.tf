@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.7.0"
 
   required_providers {
     aws = {
@@ -43,16 +43,14 @@ provider "aws" {
 # The network account is deliberately not here: it is a separate root, so its
 # pricey, timed infrastructure can be deployed and destroyed on its own.
 #
-# assume_role references the account id created earlier in this same root.
-# Terraform creates the accounts first, then uses these providers for the
-# resources that depend on them. If a first apply races that ordering, re-running
-# apply settles it; the accounts already exist by then.
+# assume_role reads the account ids from the accounts/ root's state, so the
+# accounts must exist (accounts/ applied) before this root plans.
 provider "aws" {
   alias  = "log_archive"
   region = var.region
 
   assume_role {
-    role_arn = "arn:aws:iam::${aws_organizations_account.log_archive.id}:role/${local.org_access_role}"
+    role_arn = "arn:aws:iam::${local.log_archive_account_id}:role/${local.org_access_role}"
   }
 
   default_tags {
@@ -71,7 +69,7 @@ provider "aws" {
   region = var.region
 
   assume_role {
-    role_arn = "arn:aws:iam::${aws_organizations_account.security.id}:role/${local.org_access_role}"
+    role_arn = "arn:aws:iam::${local.security_account_id}:role/${local.org_access_role}"
   }
 
   default_tags {

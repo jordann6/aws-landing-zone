@@ -18,21 +18,27 @@ reduced footprint. The canonical design is unchanged in code (all toggles defaul
 
 ## Why each toggle is off in terraform.tfvars
 
-- `full_account_set = false` — org is at its account-count limit (10). A quota
-  increase to 20 is requested (Service Quotas `L-E619E033`).
-- `enable_securityhub = false` — Security Hub is already enabled in the security
+- `full_account_set = false` (in `accounts/terraform.tfvars`): set while the org
+  was at its account-count limit (10). Suspended accounts have since cleared, so
+  the full set fits. A quota increase to 20 is requested (Service Quotas
+  `L-E619E033`), nice to have only.
+- `enable_securityhub = false`: Security Hub is already enabled in the security
   account (default standards auto-subscribed). Needs an import, not a create.
-- `enable_cost_anomaly_monitor = false` — a SERVICE-dimension monitor already
+- `enable_cost_anomaly_monitor = false`: a SERVICE-dimension monitor already
   exists in the account (`Default-Services-Monitor`); AWS allows only one.
-- `enable_tag_policy = false` — was gated during triage; the document is now
-  fixed (dropped the non-enforceable `rds:db`) and validates, so this can go true.
+- `enable_tag_policy = false` (in `accounts/terraform.tfvars`): was gated during
+  triage; the document is now fixed (dropped the non-enforceable `rds:db`) and
+  validates, so this can go true.
 
-## Full-deploy resume (once the account quota is raised to 20)
+## Full-deploy resume
 
-1. Edit `terraform/terraform.tfvars`:
-   - `full_account_set = true`
-   - `enable_tag_policy = true`   (document is fixed and API-validated)
-   - `enable_securityhub = true`  (then import, step 2)
+The org has 4 active accounts against a limit of 10, so the 5 gated accounts fit
+(9 of 10). The quota increase to 20 is nice to have, not a blocker.
+
+1. Edit the gitignored tfvars:
+   - `accounts/terraform.tfvars`: `full_account_set = true`, `enable_tag_policy = true`
+     (document is fixed and API-validated)
+   - `terraform/terraform.tfvars`: `enable_securityhub = true` (then import, step 2)
    - leave `enable_cost_anomaly_monitor = false` (existing SERVICE monitor blocks a
      second one; delete `Default-Services-Monitor` first if you want ours)
 
@@ -48,14 +54,15 @@ reduced footprint. The canonical design is unchanged in code (all toggles defaul
    remain unmanaged; optionally disable them or add `enable_default_standards =
    false` to `aws_securityhub_account` for a clean CIS-1.4.0-only posture.
 
-3. Apply governance (creates the 5 remaining accounts + dev/test/prod SSO
-   assignments + tag policy + Security Hub CIS 1.4.0):
+3. Apply accounts (creates the 5 remaining accounts + tag policy), then
+   governance (dev/test/prod SSO assignments + Security Hub CIS 1.4.0):
 
    ```
-   terraform -chdir=terraform apply
+   terraform -chdir=accounts plan -out=tfplan && terraform -chdir=accounts apply tfplan
+   terraform -chdir=terraform plan -out=tfplan && terraform -chdir=terraform apply tfplan
    ```
 
-4. Deploy the network and workload roots (hourly cost starts here — Network
+4. Deploy the network and workload roots (hourly cost starts here, Network
    Firewall, NAT, EKS, RDS Multi-AZ):
 
    ```

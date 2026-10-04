@@ -16,24 +16,23 @@ locals {
   idc_instance_arn = local.idc_enabled ? tolist(data.aws_ssoadmin_instances.this[0].arns)[0] : ""
   identity_store   = local.idc_enabled ? tolist(data.aws_ssoadmin_instances.this[0].identity_store_ids)[0] : ""
 
-  # Account name -> id, for the assignment matrix. The gated accounts drop out
-  # when full_account_set is false, and the assignment matrix below filters to
-  # whatever accounts actually exist.
-  accounts = merge(
-    {
-      management  = aws_organizations_organization.org.master_account_id
-      security    = aws_organizations_account.security.id
-      log_archive = aws_organizations_account.log_archive.id
-      sandbox     = aws_organizations_account.sandbox.id
-    },
-    var.full_account_set ? {
-      network         = one(aws_organizations_account.network[*].id)
-      shared_services = one(aws_organizations_account.shared_services[*].id)
-      dev             = one(aws_organizations_account.dev[*].id)
-      test            = one(aws_organizations_account.test[*].id)
-      prod            = one(aws_organizations_account.prod[*].id)
-    } : {}
-  )
+  # Account name -> id, for the assignment matrix. When full_account_set is false
+  # in accounts/, the gated accounts' outputs are null, and remote state omits
+  # null outputs entirely, hence try(). They drop out here and the assignment
+  # matrix below only targets accounts that exist.
+  accounts = {
+    for name, id in {
+      management      = local.management_account_id
+      security        = local.security_account_id
+      log_archive     = local.log_archive_account_id
+      sandbox         = local.acct.sandbox_account_id
+      network         = try(local.acct.network_account_id, null)
+      shared_services = try(local.acct.shared_services_account_id, null)
+      dev             = try(local.acct.dev_account_id, null)
+      test            = try(local.acct.test_account_id, null)
+      prod            = try(local.acct.prod_account_id, null)
+    } : name => id if id != null
+  }
 
   # Persona -> permission set. session_duration caps the credential lifetime;
   # prod-touching and break-glass personas get the shortest, so elevated access

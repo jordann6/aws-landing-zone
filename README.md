@@ -39,16 +39,28 @@ All three zones build to the same design. The parts specific to AWS:
 
 ## What gets built
 
-Two Terraform roots. The governance root is nearly free and always on; the
-network root is the hourly-billed inspection layer, kept separate so it comes up
-only for its demo and is destroyed on its own.
+Four Terraform roots. The accounts root is permanent and free. The governance
+root is nearly free and comes and goes with each demo. The network and workload
+roots are the hourly-billed layers, kept separate so they come up only for their
+demo and are destroyed on their own.
+
+### Accounts root (`accounts/`), permanent
+
+| Pillar | Resources | Why |
+|---|---|---|
+| Hierarchy | Security, Infrastructure, Workloads (Dev/Test/Prod), Sandbox OUs; security, network, shared-services, log-archive, dev, test, prod, sandbox accounts | Separate accounts are the real isolation boundary; Prod sits under stricter inherited policy |
+| Guardrails | SCPs (deny root, deny leave-org, region lockdown, require S3 encryption, deny public S3, deny disabling detective services); org tag policy | Preventive, inherited, and unturnoffable from inside a workload |
+
+No teardown touches this root. Accounts carry `close_on_deletion = false` and
+`prevent_destroy`, so they stay ACTIVE between demos. A closed account would sit
+SUSPENDED for 90 days, holding org quota and its email alias, and the next deploy
+would collide with it. Idle accounts cost nothing. The other roots read account
+ids from this root's state.
 
 ### Governance root (`terraform/`)
 
 | Pillar | Resources | Why |
 |---|---|---|
-| Hierarchy | Security, Infrastructure, Workloads (Dev/Test/Prod), Sandbox OUs; security, network, shared-services, log-archive, test accounts | Separate accounts are the real isolation boundary; Prod sits under stricter inherited policy |
-| Guardrails | SCPs (deny root, deny leave-org, region lockdown, require S3 encryption, deny public S3, deny disabling detective services); org tag policy | Preventive, inherited, and unturnoffable from inside a workload |
 | Logging | Org CloudTrail to an Object-Lock (WORM) S3 bucket in log-archive, KMS-encrypted, log-file validation | One immutable record of what happened, safe from the account that generated it |
 | Detective | GuardDuty + Security Hub (CIS AWS Foundations 1.4.0) + AWS Config, delegated to the security account | Security operations run outside the account that can change the org |
 | Encryption | KMS CMK with rotation, key policy scoped to the CloudTrail/Config services | One key family controls the whole audit record |
@@ -82,21 +94,24 @@ The credentialed operations run through the reviewer-gated CI (see the ADRs) or
 locally with admin credentials:
 
 ```bash
-make deploy    # governance root, then the hourly network root (asks before the billing layer)
+make deploy    # accounts, governance, then the hourly network + workload roots
 make test      # proves the guardrails DENY, not just that apply succeeded
-make destroy   # tears both roots down, then verifies nothing hourly survives
+make destroy   # tears down everything but the accounts, then verifies
 ```
 
-- `make deploy` applies the governance root, then feeds its `network_account_id`
-  and `organization_arn` outputs into the network root.
+- `make deploy` applies the accounts root (a no-op once the accounts exist) and
+  the governance root, then feeds the accounts root's `network_account_id`,
+  `prod_account_id`, and `organization_arn` outputs into the network and
+  workload roots.
 - `make test` runs `scripts/validate.sh` (the OU/SCP structure and live deny
   checks: region lockdown, CloudTrail tampering, management exemption) and
   `scripts/test-guardrails.sh` (org trail is logging, GuardDuty admin is the
   security account, and disabling Config or GuardDuty in a workload returns
   AccessDenied under the SCP).
-- `make destroy` destroys the network root, empties the Object-Lock buckets with
-  a governance-retention bypass, destroys the governance root, then runs
-  `scripts/verify-teardown.sh` to fail if any hourly resource remains.
+- `make destroy` destroys the workload and network roots, empties the
+  Object-Lock buckets with a governance-retention bypass, destroys the
+  governance root, then runs `scripts/verify-teardown.sh`. That script fails if
+  any hourly resource remains or any member account is no longer ACTIVE.
 
 ## Cost and teardown traps
 
@@ -106,7 +121,7 @@ exist to catch.
 
 | | Cost |
 |---|---|
-| Standing after destroy | ~$1 to $3/mo (KMS keys only, during their deletion window) |
+| Standing after destroy | ~$1 to $3/mo (KMS keys only, during their deletion window); accounts, OUs, and SCPs stay at $0 |
 | Demo window, governance + network | a few dollars, driven by NAT + Network Firewall while up |
 | Demo window, workload | adds RDS Multi-AZ + EKS control plane + endpoints while up; destroy the workload root as soon as its demo is done |
 
@@ -117,8 +132,9 @@ Teardown traps this repo handles:
   deletes each version with `--bypass-governance-retention` before the destroy.
 - **Order.** The network root is destroyed before the governance root, so the TGW
   and inspection VPC release cleanly.
-- **What is allowed to remain.** A KMS key pending deletion (~$1/mo until its
-  window closes) is the only thing left standing, by design.
+- **What is allowed to remain.** The accounts root (free) and a KMS key pending
+  deletion (~$1/mo until its window closes) are the only things left standing,
+  by design.
 
 ## Documentation
 

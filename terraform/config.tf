@@ -8,7 +8,7 @@
 # docs/cis-mapping.md rather than pretended here.
 
 locals {
-  config_bucket_name = "org-config-${aws_organizations_account.log_archive.id}"
+  config_bucket_name = "org-config-${local.log_archive_account_id}"
 }
 
 resource "aws_s3_bucket" "config" {
@@ -82,7 +82,7 @@ data "aws_iam_policy_document" "config_bucket" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceAccount"
-      values   = [aws_organizations_account.security.id]
+      values   = [local.security_account_id]
     }
   }
 
@@ -90,7 +90,7 @@ data "aws_iam_policy_document" "config_bucket" {
     sid       = "ConfigBucketPut"
     effect    = "Allow"
     actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.config.arn}/AWSLogs/${aws_organizations_account.security.id}/Config/*"]
+    resources = ["${aws_s3_bucket.config.arn}/AWSLogs/${local.security_account_id}/Config/*"]
     principals {
       type        = "Service"
       identifiers = ["config.amazonaws.com"]
@@ -103,7 +103,7 @@ data "aws_iam_policy_document" "config_bucket" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceAccount"
-      values   = [aws_organizations_account.security.id]
+      values   = [local.security_account_id]
     }
   }
 
@@ -156,7 +156,7 @@ resource "aws_iam_role_policy_attachment" "config_managed" {
 data "aws_iam_policy_document" "config_delivery" {
   statement {
     actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.config.arn}/AWSLogs/${aws_organizations_account.security.id}/Config/*"]
+    resources = ["${aws_s3_bucket.config.arn}/AWSLogs/${local.security_account_id}/Config/*"]
     condition {
       test     = "StringEquals"
       variable = "s3:x-amz-acl"

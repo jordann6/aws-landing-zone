@@ -5,7 +5,7 @@
 # generated it being compromised.
 
 locals {
-  trail_bucket_name = "org-cloudtrail-logs-${aws_organizations_account.log_archive.id}"
+  trail_bucket_name = "org-cloudtrail-logs-${local.log_archive_account_id}"
 }
 
 resource "aws_s3_bucket" "trail" {
@@ -102,7 +102,7 @@ data "aws_iam_policy_document" "trail_bucket" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:cloudtrail:${var.region}:${aws_organizations_organization.org.master_account_id}:trail/${var.trail_name}"]
+      values   = ["arn:aws:cloudtrail:${var.region}:${local.management_account_id}:trail/${var.trail_name}"]
     }
   }
 
@@ -110,12 +110,12 @@ data "aws_iam_policy_document" "trail_bucket" {
   # management account's own logs (and the CreateTrail validation object) under
   # its account-id prefix. An org trail needs both paths or CreateTrail fails.
   statement {
-    sid       = "CloudTrailPutOrgObjects"
-    effect    = "Allow"
-    actions   = ["s3:PutObject"]
+    sid     = "CloudTrailPutOrgObjects"
+    effect  = "Allow"
+    actions = ["s3:PutObject"]
     resources = [
-      "${aws_s3_bucket.trail.arn}/AWSLogs/${aws_organizations_organization.org.id}/*",
-      "${aws_s3_bucket.trail.arn}/AWSLogs/${aws_organizations_organization.org.master_account_id}/*",
+      "${aws_s3_bucket.trail.arn}/AWSLogs/${local.org_id}/*",
+      "${aws_s3_bucket.trail.arn}/AWSLogs/${local.management_account_id}/*",
     ]
     principals {
       type        = "Service"
@@ -129,7 +129,7 @@ data "aws_iam_policy_document" "trail_bucket" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:cloudtrail:${var.region}:${aws_organizations_organization.org.master_account_id}:trail/${var.trail_name}"]
+      values   = ["arn:aws:cloudtrail:${var.region}:${local.management_account_id}:trail/${var.trail_name}"]
     }
   }
 

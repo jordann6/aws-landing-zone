@@ -20,3 +20,6 @@ kubeconfig
 *.ppk
 .checkov.json
 infracost.json
+
+# one-time state migration output (holds account ids)
+migrate_imports.tf

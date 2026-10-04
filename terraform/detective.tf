@@ -4,8 +4,7 @@
 
 # --- GuardDuty --------------------------------------------------------------
 resource "aws_guardduty_organization_admin_account" "this" {
-  admin_account_id = aws_organizations_account.security.id
-  depends_on       = [aws_organizations_organization.org]
+  admin_account_id = local.security_account_id
 }
 
 resource "aws_guardduty_detector" "security" {
@@ -28,8 +27,7 @@ resource "aws_guardduty_organization_configuration" "this" {
 # the security account (e.g. a shared account) and managed outside this root.
 resource "aws_securityhub_organization_admin_account" "this" {
   count            = var.enable_securityhub ? 1 : 0
-  admin_account_id = aws_organizations_account.security.id
-  depends_on       = [aws_organizations_organization.org]
+  admin_account_id = local.security_account_id
 }
 
 resource "aws_securityhub_account" "security" {

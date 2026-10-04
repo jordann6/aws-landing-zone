@@ -12,30 +12,36 @@ on:
 # permissions on the job, never at file level.
 # Version pins: every reusable-workflow pin in this repo (tf-ci here, the
 # commented tf-plan + finops-gate, and apply/destroy/ttl-guard in their own
-# files) references v1.3.0, which is the tag that first carries the gated
-# apply/destroy/ttl-guard workflows (platform-guardrails#1).
+# files) references v1.4.0 (v1.3.0 added the gated apply/destroy/ttl-guard
+# workflows; v1.4.0 adds optional GCP inputs only, so no input changes here).
 permissions:
   contents: read
 
 jobs:
   static:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.3.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.4.0
     with:
       terraform_dir: terraform
       # No baseline: this repo's static gates are green as-is. Add one only if a
       # future change introduces findings that must be ratcheted down over time:
       # checkov_baseline: .checkov.baseline
 
+  # The accounts/ root holds the persistent org, OUs, accounts, and SCPs.
+  static_accounts:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.4.0
+    with:
+      terraform_dir: accounts
+
   # The network/ root is a separate root module (the timed inspection layer), so
   # it gets its own static gate.
   static_network:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.3.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.4.0
     with:
       terraform_dir: network
 
   # The workload/ root is the paved-road prod tier (data + EKS), also timed.
   static_workload:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.3.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.4.0
     with:
       terraform_dir: workload
 
@@ -45,7 +51,7 @@ jobs:
   # ACTIVATE: add the repo secret, then uncomment.
   #
   # finops:
-  #   uses: jordann6/platform-guardrails/.github/workflows/finops-gate.yml@v1.3.0
+  #   uses: jordann6/platform-guardrails/.github/workflows/finops-gate.yml@v1.4.0
   #   permissions:
   #     contents: read
   #     pull-requests: write
@@ -67,7 +73,7 @@ jobs:
   #     contents: read
   #     id-token: write
   #     pull-requests: write
-  #   uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@v1.3.0
+  #   uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@v1.4.0
   #   with:
   #     terraform_dir: terraform
   #     aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
