@@ -8,7 +8,7 @@ echo "------------------------------------------------"
 echo "STARTING SCP GOVERNANCE VALIDATION"
 echo "------------------------------------------------"
 
-cd "$(dirname "$0")/../terraform"
+cd "$(dirname "$0")/../accounts"
 
 MGMT_ACCOUNT_ID="$(terraform output -raw management_account_id)"
 SANDBOX_ACCOUNT_ID="$(terraform output -raw sandbox_account_id)"

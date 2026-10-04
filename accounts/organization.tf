@@ -16,4 +16,9 @@ resource "aws_organizations_organization" "org" {
   ]
 
   feature_set = "ALL"
+
+  # The org outlives every teardown; see accounts.tf.
+  lifecycle {
+    prevent_destroy = true
+  }
 }

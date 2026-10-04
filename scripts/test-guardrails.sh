@@ -7,7 +7,7 @@
 export AWS_PAGER=""
 set -uo pipefail
 
-cd "$(dirname "$0")/../terraform" || exit 1
+cd "$(dirname "$0")/../accounts" || exit 1
 
 PASS=0
 FAIL=0

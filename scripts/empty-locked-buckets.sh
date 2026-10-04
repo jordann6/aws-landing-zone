@@ -9,7 +9,7 @@
 export AWS_PAGER=""
 set -uo pipefail
 
-cd "$(dirname "$0")/../terraform" || exit 1
+cd "$(dirname "$0")/../accounts" || exit 1
 
 LOG_ARCHIVE_ID="$(terraform output -raw log_archive_account_id 2>/dev/null)" || {
   echo "empty-locked-buckets: no log_archive_account_id output; nothing to do."

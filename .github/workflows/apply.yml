@@ -7,7 +7,7 @@ name: Apply (gated)
 #
 # INACTIVE until Phase-1 activation:
 #   1. bootstrap roles applied (gha-plan, gha-apply)
-#   2. platform-guardrails v1.3.0 pushed
+#   2. platform-guardrails v1.4.0 pushed
 #   3. a `prod-apply` GitHub environment with a required reviewer
 #   4. 692859913278 replaced below (bootstrap outputs)
 #   5. add the real trigger (push to main) and remove this notice
@@ -28,7 +28,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@v1.3.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@v1.4.0
     with:
       terraform_dir: terraform
       environment: prod-apply

@@ -1,129 +1,20 @@
-resource "aws_organizations_account" "sandbox" {
-  name      = "sandbox"
-  email     = replace(var.org_email_domain, "@", "+sandbox@")
-  parent_id = aws_organizations_organizational_unit.sandbox.id
-
-  role_name = "OrganizationAccountAccessRole"
-
-  close_on_deletion = true
-
-  lifecycle {
-    ignore_changes = [role_name]
+# The org, OUs, member accounts, and SCPs live in the persistent accounts/ root,
+# which no teardown touches. This root reads their ids from that state, so it can
+# be destroyed and redeployed without closing an account.
+data "terraform_remote_state" "accounts" {
+  backend = "s3"
+  config = {
+    bucket = "tf-state-jordprojs"
+    key    = "aws-scp-governance/accounts.tfstate"
+    region = "us-east-1"
   }
 }
 
-# dev/test/prod/network/shared-services are gated by full_account_set. In a fresh
-# org with account headroom they all create (the canonical design). Where the org
-# is at its account-count limit, set full_account_set=false to deploy the
-# governance core plus the security, log-archive, and sandbox accounts only.
-resource "aws_organizations_account" "dev" {
-  count     = var.full_account_set ? 1 : 0
-  name      = "dev"
-  email     = replace(var.org_email_domain, "@", "+dev@")
-  parent_id = aws_organizations_organizational_unit.dev.id
+locals {
+  acct = data.terraform_remote_state.accounts.outputs
 
-  role_name = "OrganizationAccountAccessRole"
-
-  close_on_deletion = true
-
-  lifecycle {
-    ignore_changes = [role_name]
-  }
-}
-
-resource "aws_organizations_account" "test" {
-  count     = var.full_account_set ? 1 : 0
-  name      = "test"
-  email     = replace(var.org_email_domain, "@", "+test@")
-  parent_id = aws_organizations_organizational_unit.test.id
-
-  role_name = "OrganizationAccountAccessRole"
-
-  close_on_deletion = true
-
-  lifecycle {
-    ignore_changes = [role_name]
-  }
-}
-
-resource "aws_organizations_account" "prod" {
-  count     = var.full_account_set ? 1 : 0
-  name      = "prod"
-  email     = replace(var.org_email_domain, "@", "+prod@")
-  parent_id = aws_organizations_organizational_unit.prod.id
-
-  role_name = "OrganizationAccountAccessRole"
-
-  close_on_deletion = true
-
-  lifecycle {
-    ignore_changes = [role_name]
-  }
-}
-
-# --- Security OU ---
-# Delegated administrator for the org's detective services (Security Hub,
-# GuardDuty, Config aggregator, IAM Access Analyzer). Kept separate from the
-# management account so security operations never need management-account access.
-resource "aws_organizations_account" "security" {
-  name      = "security"
-  email     = replace(var.org_email_domain, "@", "+security@")
-  parent_id = aws_organizations_organizational_unit.security.id
-
-  role_name = "OrganizationAccountAccessRole"
-
-  close_on_deletion = true
-
-  lifecycle {
-    ignore_changes = [role_name]
-  }
-}
-
-# --- Infrastructure OU ---
-# network: Transit Gateway, egress/inspection VPC, Network Firewall, endpoints.
-resource "aws_organizations_account" "network" {
-  count     = var.full_account_set ? 1 : 0
-  name      = "network"
-  email     = replace(var.org_email_domain, "@", "+network@")
-  parent_id = aws_organizations_organizational_unit.infrastructure.id
-
-  role_name = "OrganizationAccountAccessRole"
-
-  close_on_deletion = true
-
-  lifecycle {
-    ignore_changes = [role_name]
-  }
-}
-
-# shared-services: private DNS resolver, future golden-image pipeline, tooling.
-resource "aws_organizations_account" "shared_services" {
-  count     = var.full_account_set ? 1 : 0
-  name      = "shared-services"
-  email     = replace(var.org_email_domain, "@", "+shared-services@")
-  parent_id = aws_organizations_organizational_unit.infrastructure.id
-
-  role_name = "OrganizationAccountAccessRole"
-
-  close_on_deletion = true
-
-  lifecycle {
-    ignore_changes = [role_name]
-  }
-}
-
-# log-archive: org CloudTrail (Object-Lock S3) and AWS Config delivery. Write-only
-# from the rest of the org; the immutable record of what happened.
-resource "aws_organizations_account" "log_archive" {
-  name      = "log-archive"
-  email     = replace(var.org_email_domain, "@", "+log-archive@")
-  parent_id = aws_organizations_organizational_unit.infrastructure.id
-
-  role_name = "OrganizationAccountAccessRole"
-
-  close_on_deletion = true
-
-  lifecycle {
-    ignore_changes = [role_name]
-  }
+  org_id                 = local.acct.organization_id
+  management_account_id  = local.acct.management_account_id
+  security_account_id    = local.acct.security_account_id
+  log_archive_account_id = local.acct.log_archive_account_id
 }

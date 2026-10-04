@@ -26,7 +26,7 @@ data "aws_iam_policy_document" "state_access" {
 }
 
 # ============================================================================
-# gha-plan — read-scoped. Assumable from PRs and from main. Refreshes and plans
+# gha-plan: read-scoped. Assumable from PRs and from main. Refreshes and plans
 # the org config; it can read everything the plan touches and write nothing.
 # ============================================================================
 data "aws_iam_policy_document" "plan_trust" {
@@ -87,7 +87,7 @@ data "aws_iam_policy_document" "plan_read_combined" {
 }
 
 # ============================================================================
-# gha-apply — write-scoped. Assumable ONLY from a job bound to one of the gated
+# gha-apply: write-scoped. Assumable ONLY from a job bound to one of the gated
 # environments. The required reviewer on those environments is the JIT-to-prod
 # control: no standing permission to change the org.
 # ============================================================================

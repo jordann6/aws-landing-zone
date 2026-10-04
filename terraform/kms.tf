@@ -16,7 +16,7 @@ data "aws_iam_policy_document" "logging_key" {
     resources = ["*"]
     principals {
       type        = "AWS"
-      identifiers = ["arn:aws:iam::${aws_organizations_account.log_archive.id}:root"]
+      identifiers = ["arn:aws:iam::${local.log_archive_account_id}:root"]
     }
   }
 
@@ -36,7 +36,7 @@ data "aws_iam_policy_document" "logging_key" {
     condition {
       test     = "StringLike"
       variable = "kms:EncryptionContext:aws:cloudtrail:arn"
-      values   = ["arn:aws:cloudtrail:*:${aws_organizations_organization.org.master_account_id}:trail/*"]
+      values   = ["arn:aws:cloudtrail:*:${local.management_account_id}:trail/*"]
     }
   }
 
@@ -68,7 +68,7 @@ data "aws_iam_policy_document" "logging_key" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceAccount"
-      values   = [aws_organizations_organization.org.master_account_id]
+      values   = [local.management_account_id]
     }
   }
 }
