@@ -55,16 +55,18 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "prod" {
   vpc_id             = aws_vpc.prod.id
   subnet_ids         = local.tgw_subnet_ids
 
-  transit_gateway_default_route_table_association = false
-  transit_gateway_default_route_table_propagation = false
+  # Shared TGW routing flags are managed by the network-account accepter below.
+  # The requester provider cannot read or manage those flags across RAM sharing.
 
   tags = { Name = "prod-attachment" }
 }
 
 resource "aws_ec2_transit_gateway_vpc_attachment_accepter" "prod" {
-  provider                      = aws.network
-  transit_gateway_attachment_id = aws_ec2_transit_gateway_vpc_attachment.prod.id
-  tags                          = { Name = "prod-attachment" }
+  provider                                        = aws.network
+  transit_gateway_attachment_id                   = aws_ec2_transit_gateway_vpc_attachment.prod.id
+  transit_gateway_default_route_table_association = false
+  transit_gateway_default_route_table_propagation = false
+  tags                                            = { Name = "prod-attachment" }
 }
 
 # Private route table: everything not local goes to the TGW (and on to the hub

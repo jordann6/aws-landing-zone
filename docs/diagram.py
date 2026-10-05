@@ -1,98 +1,88 @@
 #!/usr/bin/env python3
-"""Architecture diagram for the AWS landing zone.
+"""Render architecture.png with mingrammer diagrams and official AWS icons.
 
-Renders docs/architecture.png with the mingrammer `diagrams` library using the
-official AWS service icons. Regenerate with:
-
-    pip install diagrams   # needs graphviz (`brew install graphviz`)
-    python docs/diagram.py
+Install diagrams and Graphviz, then run python3 docs/diagram.py.
+The output path is relative to this source file, independent of the working directory.
 """
 
+from pathlib import Path
+
 from diagrams import Cluster, Diagram, Edge
-from diagrams.aws.management import Organizations, OrganizationsOrganizationalUnit, Cloudtrail, Config
-from diagrams.aws.security import SecurityHub, Guardduty, KMS, SingleSignOn, IAMPermissions
-from diagrams.aws.storage import S3
-from diagrams.aws.network import TransitGateway, NATGateway, VPC, Endpoint, NetworkFirewall
-from diagrams.aws.general import Users
-from diagrams.aws.cost import CostExplorer
 from diagrams.aws.compute import EKS, EC2ContainerRegistry
 from diagrams.aws.database import RDS
-from diagrams.aws.storage import Backup
+from diagrams.aws.management import (
+    Cloudtrail,
+    Cloudwatch,
+    CloudwatchEventEventBased,
+    Config,
+    Organizations,
+    OrganizationsAccount,
+)
+from diagrams.aws.network import Endpoint, InternetGateway, NATGateway, NetworkFirewall, TransitGateway, VPC
+from diagrams.aws.security import Guardduty, IAMPermissions, SingleSignOn
+from diagrams.aws.storage import Backup, S3
 
-graph_attr = {
-    "fontsize": "20",
-    "labelloc": "t",
-    "bgcolor": "white",
-    "pad": "0.5",
-}
+RETAINED = {"bgcolor": "#eef6ff", "color": "#7299bd", "fontsize": "17"}
+TEMPORARY = {"bgcolor": "#fff4e7", "color": "#d49447", "fontsize": "17"}
 
 with Diagram(
-    "AWS Landing Zone",
-    filename="docs/architecture",
+    "AWS Landing Zone | retained foundation and temporary demo\n"
+    "Configured relationships; no application deployed; cross-region backup disabled",
+    filename=str(Path(__file__).resolve().with_name("architecture")),
     show=False,
     direction="TB",
-    graph_attr=graph_attr,
+    graph_attr={"fontsize": "23", "labelloc": "t", "bgcolor": "white", "pad": "0.5", "nodesep": "0.8", "ranksep": "0.8", "pack": "true", "packmode": "array_u1", "splines": "spline"},
+    node_attr={"fontsize": "13"},
+    edge_attr={"fontsize": "11"},
 ):
-    people = Users("Federated workforce")
+    with Cluster("RETAIN | organization, accounts and governance", graph_attr=RETAINED):
+        with Cluster("Management account", graph_attr=RETAINED):
+            org = Organizations("Organization\n8 ACTIVE members")
+            controls = IAMPermissions("SCPs + tag policy\nRAM org sharing")
+            identity = SingleSignOn("Identity Center\noptional")
+            org >> Edge(label="member policy") >> controls
+            org >> Edge(style="dotted") >> identity
 
-    with Cluster("AWS Organization (management account)"):
-        org = Organizations("Organizations")
+        with Cluster("Security account", graph_attr=RETAINED):
+            guardduty = Guardduty("GuardDuty\ndelegated admin")
+            config = Config("AWS Config")
+            findings = CloudwatchEventEventBased("Finding alerts\nEventBridge / SNS")
+            guardduty >> Edge(style="dashed") >> findings
 
-        with Cluster("Preventive guardrails (inherited)"):
-            guardrails = [
-                IAMPermissions("SCPs"),
-                Config("Tag policy"),
-                CostExplorer("Budgets + anomaly"),
-            ]
+        with Cluster("Log-archive account", graph_attr=RETAINED):
+            trail = Cloudtrail("Organization audit\nall member accounts")
+            bucket = S3("KMS-encrypted logs\nObject Lock")
+            trail >> bucket
 
-        idc = SingleSignOn("IAM Identity Center\npersonas")
+        with Cluster("Shared-services account | retained observability", graph_attr=RETAINED):
+            monitoring = Cloudwatch("OAM + central alarms\nprod and network sources")
 
-        with Cluster("Security OU"):
-            with Cluster("security account (delegated admin)"):
-                sec = [
-                    SecurityHub("Security Hub\nCIS 1.4.0"),
-                    Guardduty("GuardDuty"),
-                    Config("AWS Config"),
-                ]
+        other_accounts = OrganizationsAccount("Dev / test / sandbox\naccounts; no VPCs")
 
-        with Cluster("Infrastructure OU"):
-            with Cluster("log-archive account"):
-                trail = Cloudtrail("Org CloudTrail")
-                log_bucket = S3("Object-Lock\nWORM bucket")
-                cmk = KMS("Logging CMK\n(rotation)")
-                trail >> Edge(label="encrypted") >> log_bucket
-                cmk >> Edge(style="dashed") >> log_bucket
+    with Cluster("TEMPORARY | workload first, network second", graph_attr=TEMPORARY):
+        with Cluster("TEAR DOWN SECOND | network account | us-east-1", graph_attr=TEMPORARY):
+            tgw = TransitGateway("RAM-shared TGW\nspoke + inspection tables")
+            with Cluster("Inspection VPC | 10.0.0.0/16 | single-AZ demo", graph_attr=TEMPORARY):
+                firewall = NetworkFirewall("Network Firewall\ndomain allowlist")
+                nat = NATGateway("Hub NAT")
+                internet = InternetGateway("Internet gateway")
+                hub_endpoints = Endpoint("Hub private endpoints\n+ S3 gateway")
+                tgw >> Edge(label="inspected egress", color="#ac6413") >> firewall
+                firewall >> nat >> internet
 
-            with Cluster("network account"):
-                tgw = TransitGateway("Transit Gateway\n(RAM shared)")
-                with Cluster("Egress / inspection VPC (10.0.0.0/16)"):
-                    fw = NetworkFirewall("Network Firewall\n(default-deny)")
-                    nat = NATGateway("NAT")
-                    endpoints = Endpoint("Private endpoints\nSSM / ECR / Secrets / Logs")
-                    tgw >> Edge(label="all egress") >> fw >> nat
+        with Cluster("TEAR DOWN FIRST | prod account | us-east-1", graph_attr=TEMPORARY):
+            with Cluster("Private VPC | 10.3.0.0/16 | no local NAT or IGW", graph_attr=TEMPORARY):
+                prod = VPC("Prod spoke\nexplicit acceptance")
+                eks = EKS("EKS private API\n2 AL2023 nodes / IRSA")
+                endpoints = Endpoint("Prod private endpoints\n+ S3 gateway")
+                rds = RDS("PostgreSQL\nprivate / encrypted / Multi-AZ")
+                prod >> Edge(style="dotted", label="hosts") >> eks
+                eks >> Edge(label="private AWS APIs") >> endpoints
+                eks >> Edge(style="dotted", label="SG permits TCP 5432") >> rds
 
-        with Cluster("Workloads OU"):
-            dev = VPC("dev\n10.1/16")
-            test = VPC("test\n10.2/16")
-            prod = VPC("prod\n10.3/16")
+            registry = EC2ContainerRegistry("ECR\nimmutable tags / scanning")
+            backup = Backup("Local daily backup\nVault Lock grace period")
+            registry >> Edge(style="dashed", label="image source") >> eks
+            rds >> Edge(style="dashed", label="backup selection") >> backup
 
-        with Cluster("Sandbox OU"):
-            sandbox = VPC("sandbox\n10.4/16")
-
-        with Cluster("Prod paved road (workload account)"):
-            eks = EKS("EKS\nprivate API, IRSA")
-            rds = RDS("RDS PostgreSQL\nMulti-AZ, CMK")
-            ecr = EC2ContainerRegistry("ECR\nscan + pull-through")
-            vault = Backup("Backup Vault Lock\n(WORM) + DR copy")
-            eks >> Edge(style="dotted", label="app only") >> rds
-            rds >> Edge(style="dashed", color="firebrick") >> vault
-
-    # Relationships
-    people >> Edge(label="SSO") >> idc
-    org >> guardrails
-    org >> idc
-    [dev, test, prod, sandbox] >> Edge(color="darkgreen", label="spoke -> TGW") >> tgw
-    [dev, test, prod, sandbox] >> Edge(style="dotted", color="gray") >> endpoints
-    prod >> Edge(label="paved road") >> eks
-    ecr >> Edge(style="dotted", color="gray", label="private pulls") >> endpoints
-    prod >> Edge(style="dashed", color="firebrick", label="audit") >> trail
+        prod >> Edge(color="#ac6413", label="egress + inspected return", constraint="false") >> tgw

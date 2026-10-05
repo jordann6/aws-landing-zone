@@ -1,167 +1,162 @@
 # AWS Landing Zone
 
-A standalone, best-practice AWS landing zone built from bespoke Terraform: a
-multi-account AWS Organization with preventive guardrails, centralized logging
-and detective controls, federated human identity, and a centralized egress
-inspection network. It deploys, proves its own guardrails, and destroys back to a
-near-zero footprint.
+A Terraform AWS landing zone with a persistent multi-account organization,
+inherited guardrails, centralized audit and security controls, and an inspected
+private workload network. The reference workload is private EKS and Multi-AZ
+PostgreSQL. Application integration is outside the completion scope.
 
-![Architecture](docs/architecture.png)
+![AWS landing-zone architecture and resource lifecycle](docs/architecture.png)
 
-## The problem it solves
+The diagram shows the infrastructure design and configured relationships, not a
+running application or proof of traffic. Blue clusters are retained foundations;
+orange clusters are temporary network and workload layers. Dev, test and sandbox
+accounts exist without deployed spoke VPCs. Cross-region backup is disabled.
 
-A single AWS account with good intentions drifts. Someone turns off CloudTrail to
-quiet an alarm, a bucket goes public for a quick test and stays that way, a
-forgotten NAT gateway bills for a year, and the blast radius of one leaked
-credential is everything. This zone is the opposite posture: separate accounts
-per environment, guardrails applied at the org so they are inherited and cannot
-be turned off from inside a workload, one immutable place all the logs land, and
-one path to the internet that is inspected. The controls are preventive where a
-deny is possible, not just detective.
+## Current status and remaining work
 
-## How AWS differs from the Azure and GCP zones
+Before teardown, Phase C verification recorded **50 network resources and 85
+workload resources deployed** in `us-east-1`. Network Firewall was READY and
+IN_SYNC, both RAM associations were ASSOCIATED, and prod could see the shared
+Transit Gateway.
+EKS 1.35 and its two-node AL2023 group were ACTIVE. PostgreSQL 16.14 was available,
+private, encrypted and Multi-AZ. Private endpoints and TGW routing were verified.
+These checks establish infrastructure state and configuration; forced database
+failover and end-to-end firewall traffic have not been demonstrated.
 
-All three zones build to the same design. The parts specific to AWS:
+**Workload teardown is complete.** Live checks confirm zero workload state
+resources, EKS clusters, nodes, RDS instances and prod interface endpoints, with
+the backup vault and app repository gone. The initial apply removed 84 resources
+but timed out disabling Inspector; an Inspector-only recovery removed the final
+resource. The diagram above records the demonstrated design, not current live
+workload inventory.
 
-- Isolation is by **account**, and the boundary is enforced by **SCPs** attached
-  to OUs, so a member account cannot escape a control by acting locally. Azure
-  uses Azure Policy at management-group scope; GCP uses org policies at the
-  folder or org root.
-- The management account is **SCP-exempt by design**, so the guardrails are
-  attached below it and root hardening on the management account is a separate,
-  documented step.
-- Centralized egress runs through a **Transit Gateway** and an inspection VPC
-  with **AWS Network Firewall**, shared to the org over RAM. Azure forces egress
-  through Azure Firewall with a UDR; GCP uses hierarchical firewall policies and
-  Cloud NAT.
-- Admin access is **SSM Session Manager** over interface endpoints. There is no
-  bastion and no public SSH.
+**Network teardown is complete:** all 50 managed resources were destroyed.
+Final state and live API checks confirm zero demo EKS, RDS, nodes, interface
+endpoints, NAT gateways, Transit Gateways and firewalls. Both demo states are
+empty and the backup vault is gone. All member accounts remain ACTIVE;
+organization RAM onboarding, governance, observability and backend state are
+retained. CloudTrail is logging, and the OAM sink, both source links and five
+central alarms remain present.
 
-## What gets built
+The demonstrated hourly layers have been removed. Retained baseline services,
+KMS deletion windows and storage can still generate charges; check billing after
+reporting catches up. Review the final source diff and preserve sibling Phase A/B
+work. Follow the [completion runbook](docs/completion.md) for verification and
+future demo lifecycle guidance. Commit, push and merge only when requested.
 
-Five Terraform roots. The accounts root is permanent and free. The governance
-and observability roots are nearly free and come and go with each demo. The
-network and workload roots are the hourly-billed layers, kept separate so they
-come up only for their demo and are destroyed on their own.
+LLM gateway integration is cancelled and was never deployed. Its checkout and
+Phase B work remain preserved separately. Provider domains and gateway output
+contracts have been removed from configuration. Network allowlist edits were not
+applied before the hub was removed; workload integration resources have also
+been removed. Legacy state-history cleanup is complete: 20 obsolete gateway
+versions were deleted and the latest clean state retained. Phase B scanner live
+verification and old-key retirement remain separate unfinished work.
 
-### Accounts root (`accounts/`), permanent
+## Account and policy boundaries
 
-| Pillar | Resources | Why |
+Security, Infrastructure, Workloads and Sandbox OUs contain eight member accounts:
+security, network, shared-services, log-archive, dev, test, prod and sandbox.
+SCPs deny root use, leaving the organization, unapproved regions, public or
+unencrypted S3, and disabling detective services. The organization also supplies
+a tag policy. Member accounts inherit the applicable controls; the management
+account is exempt from SCPs and needs its own hardening.
+
+Accounts carry `close_on_deletion = false` and `prevent_destroy`. Never close or
+suspend them as part of a demo teardown. Organizations, OUs, SCPs and idle accounts
+have no direct service fee; resources retained in those accounts can still bill.
+Permanent RAM organization onboarding lives in the accounts root, so destroying
+the network does not disable sharing for future demos.
+
+## Terraform layers
+
+| Root | Purpose | Lifecycle |
 |---|---|---|
-| Hierarchy | Security, Infrastructure, Workloads (Dev/Test/Prod), Sandbox OUs; security, network, shared-services, log-archive, dev, test, prod, sandbox accounts | Separate accounts are the real isolation boundary; Prod sits under stricter inherited policy |
-| Guardrails | SCPs (deny root, deny leave-org, region lockdown, require S3 encryption, deny public S3, deny disabling detective services); org tag policy | Preventive, inherited, and unturnoffable from inside a workload |
+| `accounts/` | Organization, OUs, accounts, SCPs, tag policy and RAM organization onboarding | Permanent |
+| `terraform/` | Audit, detective controls, identity and budgets | Retained baseline |
+| `observability/` | CloudWatch OAM links, central alarms and security findings routing | Retained baseline |
+| `network/` | Shared TGW, inspection VPC, firewall, NAT, endpoints and network logs | Temporary, hourly billing |
+| `workload/` | Private prod VPC, EKS, RDS, backup and image supply resources | Temporary, hourly billing |
 
-No teardown touches this root. Accounts carry `close_on_deletion = false` and
-`prevent_destroy`, so they stay ACTIVE between demos. A closed account would sit
-SUSPENDED for 90 days, holding org quota and its email alias, and the next deploy
-would collide with it. Idle accounts cost nothing. The other roots read account
-ids from this root's state.
+Phase A observability is included in this repository. Its shared-services
+CloudWatch OAM sink, prod/network links, central alarms and security findings
+routing are retained. The workload includes the Container Insights add-on and
+IRSA configuration for a future operator-reviewed deployment; that add-on was
+not part of the completed Phase C demo.
 
-### Governance root (`terraform/`)
+### Governance
 
-| Pillar | Resources | Why |
-|---|---|---|
-| Logging | Org CloudTrail to an Object-Lock (WORM) S3 bucket in log-archive, KMS-encrypted, log-file validation | One immutable record of what happened, safe from the account that generated it |
-| Detective | GuardDuty + Security Hub (CIS AWS Foundations 1.4.0) + AWS Config, delegated to the security account | Security operations run outside the account that can change the org |
-| Encryption | KMS CMK with rotation, key policy scoped to the CloudTrail/Config services | One key family controls the whole audit record |
-| Identity | IAM Identity Center personas (admin, platform-eng, junior-eng, manager, finops, security, break-glass) with permissions boundaries and short sessions | No IAM users; access is a group membership and a short session, no standing prod write |
-| Root hardening | Strict password policy; EventBridge alarm on any root use | The account nobody should log in with cannot be used quietly |
-| Cost | Monthly budget + Cost Anomaly Detection | Catches a forgotten hourly resource before the invoice does |
+| Control | Implementation |
+|---|---|
+| Audit | Organization CloudTrail and Config delivery to encrypted S3; GOVERNANCE-mode Object Lock and trail validation |
+| Detection | GuardDuty delegation; optional Security Hub CIS AWS Foundations 1.4.0 integration; AWS Config |
+| Identity | Optional IAM Identity Center personas, permission boundaries and short sessions |
+| Encryption | Customer-managed KMS keys with rotation and scoped service policies |
+| Root use | Management password policy and EventBridge root-use alerting |
+| Cost | Monthly budget; optional Cost Anomaly Detection monitor |
 
-### Network root (`network/`)
+Optional integrations are controlled by Terraform variables. They must not be
+reported as deployed merely because their definitions exist.
 
-| Pillar | Resources | Why |
-|---|---|---|
-| Connectivity | Transit Gateway, RAM-shared to the org, explicit attachment acceptance | Spokes attach to reach the internet; no auto-join |
-| Inspection | Egress VPC, AWS Network Firewall (domain-allowlist default-deny), NAT, routing that forces egress and return through the firewall | Nothing reaches the internet without passing the firewall; the default-deny is what will enforce the pull-through cache |
-| Private access | Interface endpoints (SSM, ECR, Secrets Manager, Logs) + S3 gateway endpoint | Registry, secrets, and logging over private IPs; SSM gives admin access with no bastion |
-| Telemetry | VPC flow logs, firewall flow and alert logs to CloudWatch | A record of what traversed the hub |
+### Inspected network
 
-### Workload root (`workload/`), the prod paved road
+The network account hosts the `10.0.0.0/16` inspection VPC. RAM shares the Transit
+Gateway with the organization; prod attaches through explicit acceptance. Separate
+spoke and inspection route tables route internet egress and return traffic through
+Network Firewall and the hub NAT. The demo inspection path uses one availability
+zone and is not a production availability design.
 
-| Pillar | Resources | Why |
-|---|---|---|
-| Prod VPC | Private VPC (10.3.0.0/16), no IGW/NAT, TGW-attached; egress inherits the hub firewall | A workload account with no independent path to the internet |
-| Data segmentation | App and DB security groups (only the app tier reaches the DB on 5432) + a data-subnet NACL | Least-access data tier; see the who-can-talk-to-whom matrix in the data-tier doc |
-| Database | RDS PostgreSQL, Multi-AZ, gp3, CMK-encrypted, private, RDS-managed secret | Active-passive failover, no password in state |
-| Backup | AWS Backup Vault Lock (WORM) + cross-region copy | Immutable backups, a defense against ransomware not just failure |
-| Cluster | EKS with a private API, KMS-encrypted etcd secrets, IRSA | Pods get scoped IAM, no node-wide keys, no public control plane |
-| Supply chain | ECR (immutable tags, scan-on-push) + pull-through cache + Inspector; EC2 Image Builder | Private registry as the only image source; hardened node AMIs |
-| Workload metrics | Container Insights (`amazon-cloudwatch-observability` add-on) on an IRSA role, plus a `monitoring` endpoint | Node and pod health as CloudWatch metrics, alarmed centrally ([ADR-0002](docs/adr/0002-eks-metrics-container-insights.md)) |
+The source allowlist now defaults to AWS and Cognito domains. The prod source CIDR
+is included in firewall HOME_NET. Hub interface endpoints, an S3 gateway endpoint,
+VPC flow logs and firewall flow/alert logs support private access and investigation.
 
-### Observability root (`observability/`)
+### Private reference workload
 
-| Pillar | Resources | Why |
-|---|---|---|
-| Finding routing | EventBridge rules in the security account: GuardDuty severity 7+ and Security Hub HIGH/CRITICAL (GuardDuty duplicates excluded) to a `security-findings` topic | Every serious finding in the org lands in one place a runbook can subscribe to |
-| Monitoring account | Shared-services holds a CloudWatch OAM sink; prod and network link to it with metrics, logs, and traces | Alarms and dashboards live where no workload team can change them, while data stays in the account that produced it |
-| Central alarms | RDS CPU and free storage, EKS failed nodes, Network Firewall dropped packets, AWS Backup failed jobs, each reading its source account through OAM, to an `ops-alarms` topic on ALARM and OK | One alarm plane and one input for the incident responder |
-| Encryption | A customer-managed KMS key per alert topic, granting only EventBridge or CloudWatch for that topic | Neither service can publish to a topic under the AWS-managed `aws/sns` key |
+| Component | Implementation |
+|---|---|
+| VPC | `10.3.0.0/16`, private subnets, no local IGW or NAT; TGW inspection route |
+| Access | Prod's own interface endpoints for ECR, STS, EC2, ELB, Logs, Monitoring, EKS, SSM and Secrets Manager; S3 gateway endpoint |
+| EKS | Private API, encrypted secrets, IRSA and two AL2023 managed nodes |
+| PostgreSQL | Encrypted private Multi-AZ RDS with a managed secret; app-to-DB security group access on port 5432 and data subnet NACL |
+| Backup | Daily local AWS Backup and Vault Lock with a demo grace period; cross-region copy requires explicit region approval and opt-in |
+| Supply chain | Immutable ECR tags, scanning, pull-through cache, Inspector and an on-demand Image Builder pipeline |
 
-`make test-observability` raises a GuardDuty sample finding and checks the
-publish, confirms both source accounts' metrics are visible in the monitoring
-account, and forces an alarm to confirm its SNS action succeeds.
+The deployed node group uses the standard AL2023 EKS image. The Image Builder
+pipeline does not establish that a custom image was built or used. No application
+has been deployed to prove the permitted app-to-database path.
 
-## Deploy, test, destroy
+## Plan, prove and tear down
 
-The credentialed operations run through the reviewer-gated CI (see the ADRs) or
-locally with admin credentials:
+The assistant runs formatting, validation, saved plans and read-only verification.
+The operator reviews and runs applies and destroys. For future demos, the private
+input exporter reads existing account and network state:
 
 ```bash
-make deploy    # accounts, governance, then the hourly network + workload roots
-make test      # proves the guardrails DENY, not just that apply succeeded
-make destroy   # tears down everything but the accounts, then verifies
+python3 /Users/jordannelson/aws-scp-governance-phaseC/scripts/prepare-workload-inputs.py --workload
+terraform -chdir=/Users/jordannelson/aws-scp-governance-phaseC/workload fmt -check
+terraform -chdir=/Users/jordannelson/aws-scp-governance-phaseC/workload validate
+terraform -chdir=/Users/jordannelson/aws-scp-governance-phaseC/workload plan -var-file=phase-c.tfvars.json -out=tfplan -input=false
+terraform -chdir=/Users/jordannelson/aws-scp-governance-phaseC/workload show tfplan
 ```
 
-- `make deploy` applies the accounts root (a no-op once the accounts exist) and
-  the governance root, then feeds the accounts root's `network_account_id`,
-  `prod_account_id`, and `organization_arn` outputs into the network and
-  workload roots.
-- `make test` runs `scripts/validate.sh` (the OU/SCP structure and live deny
-  checks: region lockdown, CloudTrail tampering, management exemption) and
-  `scripts/test-guardrails.sh` (org trail is logging, GuardDuty admin is the
-  security account, and disabling Config or GuardDuty in a workload returns
-  AccessDenied under the SCP).
-- `make destroy` destroys the workload and network roots, empties the
-  Object-Lock buckets with a governance-retention bypass, destroys the
-  governance root, then runs `scripts/verify-teardown.sh`. That script fails if
-  any hourly resource remains or any member account is no longer ACTIVE.
+The exporter requires the deployed network. Generated inputs, state and saved
+plans stay private and gitignored. Its previous filename remains a compatibility
+entry point. A saved plan must match the intended operation and current state
+before an operator applies it.
 
-## Cost and teardown traps
+Guardrail verification scripts check the organization structure, logging and
+selected live deny behavior. They do not measure RDS failover or prove application
+traffic. The state-based `scripts/verify-teardown.sh` is a supplemental check;
+completion requires live inventory checks too, as described in the runbook.
 
-The guardrail and topology layer is nearly free. The cost risk is a forgotten
-hourly resource, which is exactly what the TTL guard and `verify-teardown.sh`
-exist to catch.
+Destroy **workload first, network second**. Do not use general `make destroy` for
+this completion path because it also removes governance and audit buckets. Retain
+the audit history and observability foundation. An expired compliance lock with
+recovery points can block backup deletion until retention ends. KMS deletion
+windows, Secrets Manager recovery windows, retained storage and baseline services
+can leave residual charges after the hourly layers are gone. Check billing after
+the reporting data catches up.
 
-| | Cost |
-|---|---|
-| Standing after destroy | ~$1 to $3/mo (KMS keys only, during their deletion window); accounts, OUs, and SCPs stay at $0 |
-| Demo window, governance + network | a few dollars, driven by NAT + Network Firewall while up |
-| Demo window, workload | adds RDS Multi-AZ + EKS control plane + endpoints while up; destroy the workload root as soon as its demo is done |
-
-Teardown traps this repo handles:
-
-- **Object-Lock buckets.** The trail and config buckets use GOVERNANCE-mode WORM,
-  so `force_destroy` alone cannot empty them. `scripts/empty-locked-buckets.sh`
-  deletes each version with `--bypass-governance-retention` before the destroy.
-- **Order.** The network root is destroyed before the governance root, so the TGW
-  and inspection VPC release cleanly.
-- **What is allowed to remain.** The accounts root (free) and a KMS key pending
-  deletion (~$1/mo until its window closes) are the only things left standing,
-  by design.
-
-## Documentation
-
-- [docs/cis-mapping.md](docs/cis-mapping.md): CIS AWS Foundations control IDs
-  mapped to the exact Terraform resource or policy, with honest N/A rows.
-- [docs/access-model.md](docs/access-model.md): the persona-by-scope matrix and
-  the CIS control each row satisfies.
-- [docs/accelerator-vs-bespoke.md](docs/accelerator-vs-bespoke.md): why this is
-  hand-written Terraform rather than Control Tower or the Landing Zone Accelerator.
-- [docs/data-tier.md](docs/data-tier.md): the data-tier segmentation matrix, the
-  RTO/RPO of the failover, backup immutability, and the EKS paved road.
-
-## Pipeline
+## Validation and CI
 
 CI runs the shared [platform-guardrails](https://github.com/jordann6/platform-guardrails)
 static gates (gitleaks, fmt/validate, tflint, Checkov, Trivy, conftest OPA) on
@@ -176,3 +171,13 @@ the organization's tag policy. Pricing estimates still use the Infracost API.
 The OIDC plan job and scheduled TTL trigger are currently disabled. Apply and
 destroy workflows are available by manual dispatch; local credentialed applies
 and destroys are run by the operator using reviewed, saved plans.
+
+## Documentation
+
+- [Completion runbook](docs/completion.md): completed teardown, verification and closeout steps.
+- [Separate security cleanup](docs/security-cleanup.md): retired state-history cleanup without redeploying the gateway.
+- [CIS mapping](docs/cis-mapping.md): controls mapped to resources and policies, with scope limitations.
+- [Access model](docs/access-model.md): personas, account scope and permissions.
+- [Data tier](docs/data-tier.md): segmentation, backup policy and availability design; proof limits are explicit.
+- [Architecture decision](docs/accelerator-vs-bespoke.md): bespoke Terraform versus Control Tower and Landing Zone Accelerator.
+- [Diagram source](docs/diagram.py): official AWS icons via the mingrammer `diagrams` library. Regenerate with `python3 docs/diagram.py` after installing `diagrams` and Graphviz.
