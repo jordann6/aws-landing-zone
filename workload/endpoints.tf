@@ -11,6 +11,7 @@ locals {
     "ec2",
     "elasticloadbalancing",
     "logs",
+    "monitoring",
     "eks",
     "ssm",
     "ssmmessages",

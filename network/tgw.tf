@@ -20,7 +20,9 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "hub" {
   vpc_id             = aws_vpc.hub.id
   subnet_ids         = [aws_subnet.this["tgw"].id]
 
-  appliance_mode_support = "enable"
+  appliance_mode_support                          = "enable"
+  transit_gateway_default_route_table_association = false
+  transit_gateway_default_route_table_propagation = false
 
   tags = { Name = "hub-inspection-attachment" }
 }

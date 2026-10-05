@@ -31,11 +31,11 @@ prod are different accounts with different VPCs and no path between them.
 | RPO | ~0 (no data loss) | Synchronous replication to the standby |
 | RTO | ~1 to 2 minutes | AWS detects failure and promotes the standby automatically (DNS flips to the new primary) |
 | Backup RPO | 1 day (schedule) plus 5-minute PITR window | Daily AWS Backup plus RDS continuous backup |
-| DR region | Cross-region copy | Backup plan copies each recovery point to a vault in the DR region |
+| DR region | Opt-in cross-region copy | Disabled until organization governance permits the destination region |
 
-`make test` forces the failover (`reboot-db-instance --force-failover`) and
-confirms the primary moves to the other AZ, then checks the backup vault is
-locked and the EKS endpoint is private.
+`make test` checks Multi-AZ, encryption, private access, Vault Lock and the
+private EKS endpoint. A forced failover is a separate operator test and has not
+been performed in the current deployment.
 
 ## Backups: immutability
 
@@ -43,12 +43,14 @@ The backup vault uses AWS Backup Vault Lock. Within the retention window a
 recovery point cannot be deleted or shortened by anyone, including the account
 root, which is what makes the backup a defense against ransomware and not just
 hardware failure. `changeable_for_days` keeps the lock adjustable briefly so the
-demo can be torn down; production sets it to 0 for immediate compliance-mode WORM.
+demo can be torn down before the grace period expires. Retained recovery points
+become immutable after the compliance grace period.
 
 Demo scope: the vault lives in the prod account. Production isolates it in a
 separate backup account via AWS Backup cross-account copy and an org backup
 policy, so a compromise of prod cannot reach the backups. The cross-region copy
-is built; the cross-account isolation is the documented upgrade.
+is implemented behind `enable_cross_region_backup`, disabled by default until
+region approval. Cross-account isolation is a documented production upgrade.
 
 ## Supply chain and the cluster
 

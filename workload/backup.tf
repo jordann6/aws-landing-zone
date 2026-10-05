@@ -1,4 +1,4 @@
-# AWS Backup with Vault Lock (WORM) and a cross-region copy. Vault Lock makes a
+# AWS Backup with Vault Lock (WORM) and an opt-in cross-region copy. Vault Lock makes a
 # recovery point immutable: within the retention window nobody, not even the
 # account root, can delete or shorten it. That is the property that makes a backup
 # a defense against ransomware rather than just against hardware failure.
@@ -10,7 +10,7 @@ resource "aws_backup_vault" "prod" {
 }
 
 # changeable_for_days keeps the lock adjustable for a short window so the demo can
-# be torn down; production sets it to 0 for immediate, irreversible compliance-mode
+# be torn down; production keeps the lock past its grace period for compliance-mode
 # WORM. min_retention is the floor no recovery point can go below.
 resource "aws_backup_vault_lock_configuration" "prod" {
   backup_vault_name   = aws_backup_vault.prod.name
@@ -20,9 +20,10 @@ resource "aws_backup_vault_lock_configuration" "prod" {
 }
 
 resource "aws_backup_vault" "dr" {
+  count       = var.enable_cross_region_backup ? 1 : 0
   provider    = aws.prod_dr
   name        = "prod-data-vault-dr"
-  kms_key_arn = aws_kms_key.data_dr.arn
+  kms_key_arn = aws_kms_key.data_dr[0].arn
   tags        = { Name = "prod-data-vault-dr" }
 }
 
@@ -60,11 +61,14 @@ resource "aws_backup_plan" "prod" {
       delete_after = var.backup_max_retention_days
     }
 
-    # Cross-region copy to the DR vault.
-    copy_action {
-      destination_vault_arn = aws_backup_vault.dr.arn
-      lifecycle {
-        delete_after = var.backup_max_retention_days
+    # Cross-region copy requires prior approval of the destination region.
+    dynamic "copy_action" {
+      for_each = var.enable_cross_region_backup ? [1] : []
+      content {
+        destination_vault_arn = aws_backup_vault.dr[0].arn
+        lifecycle {
+          delete_after = var.backup_max_retention_days
+        }
       }
     }
   }

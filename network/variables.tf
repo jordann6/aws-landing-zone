@@ -39,6 +39,12 @@ variable "allowed_egress_domains" {
   default     = [".amazonaws.com", ".amazoncognito.com"]
 }
 
+variable "inspected_spoke_cidrs" {
+  description = "Spoke source ranges inspected by the domain allowlist"
+  type        = list(string)
+  default     = ["10.3.0.0/16"]
+}
+
 variable "flow_log_retention_days" {
   description = "CloudWatch retention for VPC flow logs"
   type        = number

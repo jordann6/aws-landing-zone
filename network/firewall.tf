@@ -10,6 +10,14 @@ resource "aws_networkfirewall_rule_group" "allow_domains" {
   capacity = 100
 
   rule_group {
+    rule_variables {
+      ip_sets {
+        key = "HOME_NET"
+        ip_set {
+          definition = concat([var.hub_cidr], var.inspected_spoke_cidrs)
+        }
+      }
+    }
     rules_source {
       rules_source_list {
         generated_rules_type = "ALLOWLIST"

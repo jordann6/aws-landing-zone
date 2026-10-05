@@ -10,6 +10,12 @@ variable "dr_region" {
   default     = "us-west-2"
 }
 
+variable "enable_cross_region_backup" {
+  description = "Create DR backup resources only after the destination region is approved by organization governance. Deferred to Phase D."
+  type        = bool
+  default     = false
+}
+
 variable "owner" {
   type    = string
   default = "jordan"
@@ -51,7 +57,7 @@ variable "azs" {
 variable "db_engine_version" {
   description = "PostgreSQL engine version"
   type        = string
-  default     = "16.4"
+  default     = "16.14"
 }
 
 variable "db_instance_class" {
@@ -73,7 +79,7 @@ variable "backup_max_retention_days" {
 }
 
 variable "backup_changeable_after_days" {
-  description = "Days before the Vault Lock becomes immutable. 3 keeps the demo destroyable; production sets 0 for true compliance-mode WORM."
+  description = "Compliance-mode Vault Lock grace period in days. Finish demo teardown before it expires; retained recovery points become immutable afterward."
   type        = number
   default     = 3
 }
@@ -81,7 +87,7 @@ variable "backup_changeable_after_days" {
 variable "eks_version" {
   description = "EKS Kubernetes version"
   type        = string
-  default     = "1.30"
+  default     = "1.35"
 }
 
 variable "eks_node_instance_type" {

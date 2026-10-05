@@ -68,7 +68,7 @@ view; this table is the design-time intent behind that score.
 | RDS not publicly accessible | `aws_db_instance.prod` (`publicly_accessible = false`), private subnets, no IGW/NAT |
 | RDS credential not in code | `manage_master_user_password` (RDS-managed secret in Secrets Manager) |
 | Database reachable only from the app tier | `aws_security_group.db` ingress from the app SG only, plus the data NACL |
-| Immutable backups | `aws_backup_vault_lock_configuration.prod` (WORM), cross-region copy |
+| Immutable backups | `aws_backup_vault_lock_configuration.prod` (WORM); cross-region copy is opt-in after region approval |
 | EKS secrets encrypted in etcd | `aws_eks_cluster.prod` `encryption_config` with a CMK |
 | EKS private control plane | `aws_eks_cluster.prod` (`endpoint_public_access = false`) |
 | Pod-scoped IAM, no static keys | IRSA via `aws_iam_openid_connect_provider.eks` (`irsa.tf`) |
