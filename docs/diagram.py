@@ -54,7 +54,7 @@ with Diagram(
             bucket = S3("KMS-encrypted logs\nObject Lock")
             trail >> bucket
 
-        with Cluster("Shared-services account | Phase A sibling checkout", graph_attr=RETAINED):
+        with Cluster("Shared-services account | retained observability", graph_attr=RETAINED):
             monitoring = Cloudwatch("OAM + central alarms\nprod and network sources")
 
         other_accounts = OrganizationsAccount("Dev / test / sandbox\naccounts; no VPCs")

@@ -2,11 +2,12 @@ TF_ACCT ?= accounts
 TF_GOV ?= terraform
 TF_NET ?= network
 TF_WORK ?= workload
+TF_OBS ?= observability
 
 .PHONY: help
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  %-22s %s\n", $$1, $$2}'
 
 # ---- static gates (same as CI, credential-free) ----------------------------
 
@@ -16,6 +17,7 @@ fmt: ## Terraform format check, all roots
 	terraform -chdir=$(TF_GOV) fmt -check -recursive
 	terraform -chdir=$(TF_NET) fmt -check -recursive
 	terraform -chdir=$(TF_WORK) fmt -check -recursive
+	terraform -chdir=$(TF_OBS) fmt -check -recursive
 
 .PHONY: validate
 validate: ## Terraform validate, all roots
@@ -23,6 +25,7 @@ validate: ## Terraform validate, all roots
 	terraform -chdir=$(TF_GOV) init -backend=false && terraform -chdir=$(TF_GOV) validate
 	terraform -chdir=$(TF_NET) init -backend=false && terraform -chdir=$(TF_NET) validate
 	terraform -chdir=$(TF_WORK) init -backend=false && terraform -chdir=$(TF_WORK) validate
+	terraform -chdir=$(TF_OBS) init -backend=false && terraform -chdir=$(TF_OBS) validate
 
 .PHONY: diagram
 diagram: ## Regenerate docs/architecture.png
@@ -31,7 +34,7 @@ diagram: ## Regenerate docs/architecture.png
 # ---- deploy / test / destroy ----------------------------------------------
 
 .PHONY: deploy
-deploy: ## Deploy accounts, governance, then the (hourly-billed) network + workload roots
+deploy: ## Deploy accounts, governance, network + workload (hourly), then observability
 	@echo "==> Accounts root (persistent: org, OUs, member accounts, SCPs). Never destroyed."
 	terraform -chdir=$(TF_ACCT) init
 	terraform -chdir=$(TF_ACCT) apply
@@ -58,18 +61,32 @@ deploy: ## Deploy accounts, governance, then the (hourly-billed) network + workl
 	   -var prod_account_id=$$PROD_ID \
 	   -var network_account_id=$$NET_ID \
 	   -var transit_gateway_id=$$TGW_ID
+	@$(MAKE) --no-print-directory deploy-observability
+
+.PHONY: deploy-observability
+deploy-observability: ## Finding routing, OAM monitoring account, central alarms (~free)
+	@echo "==> Observability root: security-findings + ops topics, OAM sink and links, alarms"
+	terraform -chdir=$(TF_OBS) init
+	terraform -chdir=$(TF_OBS) apply
+
+.PHONY: test-observability
+test-observability: ## Sample GuardDuty finding, cross-account metrics, forced alarm
+	scripts/test-observability.sh
 
 .PHONY: test
 test: ## Prove the guardrails actually deny, not just that apply succeeded
 	scripts/validate.sh
 	scripts/test-guardrails.sh
 	scripts/test-data-tier.sh
+	scripts/test-observability.sh
 
 .PHONY: destroy
 # The accounts/ root is deliberately absent: member accounts stay ACTIVE across
 # teardowns (prevent_destroy, close_on_deletion = false), so a redeploy reuses
 # them instead of colliding with SUSPENDED ones.
 destroy: ## Tear down everything except the persistent accounts, then verify
+	@echo "==> Destroying the observability root (alarms, OAM, finding routing)"
+	-terraform -chdir=$(TF_OBS) destroy
 	@echo "==> Destroying the workload root first (releases RDS, EKS, endpoints)"
 	@echo "    If backups have run, Vault Lock recovery points may block the vault until"
 	@echo "    the changeable window; delete recovery points or wait, then re-run."

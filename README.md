@@ -73,13 +73,15 @@ the network does not disable sharing for future demos.
 |---|---|---|
 | `accounts/` | Organization, OUs, accounts, SCPs, tag policy and RAM organization onboarding | Permanent |
 | `terraform/` | Audit, detective controls, identity and budgets | Retained baseline |
+| `observability/` | CloudWatch OAM links, central alarms and security findings routing | Retained baseline |
 | `network/` | Shared TGW, inspection VPC, firewall, NAT, endpoints and network logs | Temporary, hourly billing |
 | `workload/` | Private prod VPC, EKS, RDS, backup and image supply resources | Temporary, hourly billing |
 
-Phase A observability is maintained in the original sibling checkout on
-`phaseA-observability`. Its shared-services CloudWatch OAM sink, prod/network links,
-central alarms and security findings routing are retained. That root is not yet
-part of this Phase C checkout; preserve its separate changes during final review.
+Phase A observability is included in this repository. Its shared-services
+CloudWatch OAM sink, prod/network links, central alarms and security findings
+routing are retained. The workload includes the Container Insights add-on and
+IRSA configuration for a future operator-reviewed deployment; that add-on was
+not part of the completed Phase C demo.
 
 ### Governance
 
@@ -156,12 +158,19 @@ the reporting data catches up.
 
 ## Validation and CI
 
-CI runs the shared
-[platform-guardrails](https://github.com/jordann6/platform-guardrails)
-credential-free static gates on accounts, governance, network and workload.
-Credentialed plan, apply and scheduled TTL workflows remain inactive. There is no
-automatic cleanup to rely on; reviewed plans and operator actions govern the demo
-lifecycle.
+CI runs the shared [platform-guardrails](https://github.com/jordann6/platform-guardrails)
+static gates (gitleaks, fmt/validate, tflint, Checkov, Trivy, conftest OPA) on
+the accounts, governance, network, workload, and observability roots. OPA checks
+required tags and CostCenter. A repo-local Infracost workflow gates network,
+workload, and observability changes at a $50/month increase, with an explicit
+`cost-approved` PR label override. It runs before the PR report, rejects missing
+cost estimates, and stores each root's report separately. Hosted Infracost
+policy enforcement is disabled because its example tagging rules conflict with
+the organization's tag policy. Pricing estimates still use the Infracost API.
+
+The OIDC plan job and scheduled TTL trigger are currently disabled. Apply and
+destroy workflows are available by manual dispatch; local credentialed applies
+and destroys are run by the operator using reviewed, saved plans.
 
 ## Documentation
 
