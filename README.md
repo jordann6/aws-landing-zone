@@ -164,7 +164,15 @@ Teardown traps this repo handles:
 ## Pipeline
 
 CI runs the shared [platform-guardrails](https://github.com/jordann6/platform-guardrails)
-reusable workflows: credential-free static gates (gitleaks, fmt/validate,
-tflint, Checkov, Trivy, conftest OPA) on both roots, an OIDC-authenticated plan
-with a destroy guard, a reviewer-gated apply, and a scheduled TTL guard that
-alarms if an hourly resource is ever left standing.
+static gates (gitleaks, fmt/validate, tflint, Checkov, Trivy, conftest OPA) on
+the accounts, governance, network, workload, and observability roots. OPA checks
+required tags and CostCenter. A repo-local Infracost workflow gates network,
+workload, and observability changes at a $50/month increase, with an explicit
+`cost-approved` PR label override. It runs before the PR report, rejects missing
+cost estimates, and stores each root's report separately. Hosted Infracost
+policy enforcement is disabled because its example tagging rules conflict with
+the organization's tag policy. Pricing estimates still use the Infracost API.
+
+The OIDC plan job and scheduled TTL trigger are currently disabled. Apply and
+destroy workflows are available by manual dispatch; local credentialed applies
+and destroys are run by the operator using reviewed, saved plans.
