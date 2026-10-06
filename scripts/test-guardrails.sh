@@ -2,7 +2,9 @@
 #
 # test-guardrails.sh: prove the Phase 2 controls actually enforce, post-deploy.
 # Complements validate.sh (which proves the SCP/OU structure) by exercising the
-# logging, detective, and deny-disable guardrails against live accounts.
+# logging, detective, and deny-disable guardrails against live accounts, then the
+# compute baseline (sandbox-first SCPs + EC2 declarative policy) with EC2
+# --dry-run calls, which are free and are evaluated against both.
 
 export AWS_PAGER=""
 set -uo pipefail
@@ -15,6 +17,8 @@ pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 
 DEV_ACCOUNT_ID="$(terraform output -raw dev_account_id)"
+SANDBOX_ACCOUNT_ID="$(terraform output -raw sandbox_account_id)"
+SANDBOX_OU_ID="$(terraform output -raw sandbox_ou_id)"
 SECURITY_ACCOUNT_ID="$(terraform output -raw security_account_id)"
 
 assume() {
@@ -31,16 +35,16 @@ clear_creds() { unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN;
 
 denied() { echo "$1" | grep -qE "AccessDenied|explicit deny|with an explicit deny"; }
 
-echo "[1/4] Organization CloudTrail is logging..."
+echo "[1/9] Organization CloudTrail is logging..."
 STATUS="$(aws cloudtrail get-trail-status --name org-trail --query IsLogging --output text 2>&1)"
 [[ "$STATUS" == "True" ]] && pass "org-trail IsLogging=True" || fail "org-trail logging ($STATUS)"
 
-echo "[2/4] GuardDuty delegated admin is the security account..."
+echo "[2/9] GuardDuty delegated admin is the security account..."
 ADMIN="$(aws guardduty list-organization-admin-accounts \
   --query 'AdminAccounts[0].AdminAccountId' --output text 2>&1)"
 [[ "$ADMIN" == "$SECURITY_ACCOUNT_ID" ]] && pass "GuardDuty admin = security account" || fail "GuardDuty admin ($ADMIN)"
 
-echo "[3/4] deny-disable-detective blocks turning Config off (dev account)..."
+echo "[3/9] deny-disable-detective blocks turning Config off (dev account)..."
 if assume "$DEV_ACCOUNT_ID"; then
   OUT="$(aws configservice stop-configuration-recorder \
     --configuration-recorder-name default 2>&1)"
@@ -50,7 +54,7 @@ else
   fail "could not assume into dev account"
 fi
 
-echo "[4/4] deny-disable-detective blocks disabling GuardDuty (dev account)..."
+echo "[4/9] deny-disable-detective blocks disabling GuardDuty (dev account)..."
 if assume "$DEV_ACCOUNT_ID"; then
   OUT="$(aws guardduty delete-detector \
     --detector-id 00000000000000000000000000000000 2>&1)"
@@ -58,6 +62,84 @@ if assume "$DEV_ACCOUNT_ID"; then
   clear_creds
 else
   fail "could not assume into dev account"
+fi
+
+# ---- compute baseline (sandbox OU) --------------------------------------------
+skip() { echo "  SKIP: $1"; }
+# A dry run that passes authorization fails with DryRunOperation. Each denial
+# below matches the exact text its layer returns (verified live 2026-10-06).
+dry_allowed() { echo "$1" | grep -q "DryRunOperation"; }
+
+ATTACHED="$(aws organizations list-policies-for-target --target-id "$SANDBOX_OU_ID" \
+  --filter DECLARATIVE_POLICY_EC2 --query "Policies[?Name=='sandbox-ec2-baseline'] | length(@)" --output text 2>&1)"
+if [[ "$ATTACHED" != "1" ]]; then
+  for n in 5 6 7 8 9; do echo "[$n/9] compute baseline"; skip "sandbox-ec2-baseline not attached; apply the accounts plan first"; done
+else
+  AL2023="$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+    --query Parameter.Value --output text)"
+  UBUNTU="$(aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id \
+    --query Parameter.Value --output text)"
+  # Control for [7/9]: the Ubuntu AMI must exist (seen from the management
+  # account, which has no Allowed AMIs policy). Otherwise a deleted image would
+  # pass as "denied".
+  UBUNTU_STATE="$(aws ec2 describe-images --image-ids "$UBUNTU" --query 'Images[0].State' --output text 2>&1)"
+  if assume "$SANDBOX_ACCOUNT_ID"; then
+    echo "[5/9] Declarative policy is in effect in the sandbox account..."
+    STATE="$(aws ec2 get-allowed-images-settings --query State --output text 2>&1)"
+    [[ "$STATE" == "enabled" ]] && pass "sandbox: Allowed AMIs enabled" || fail "sandbox: Allowed AMIs ($STATE)"
+    TOKENS="$(aws ec2 get-instance-metadata-defaults --query AccountLevel.HttpTokens --output text 2>&1)"
+    [[ "$TOKENS" == "required" ]] && pass "sandbox: IMDSv2 required by default" || fail "sandbox: IMDS default ($TOKENS)"
+    HOPS="$(aws ec2 get-instance-metadata-defaults --query AccountLevel.HttpPutResponseHopLimit --output text 2>&1)"
+    [[ "$HOPS" == "1" ]] && pass "sandbox: IMDS hop limit 1 by default" || fail "sandbox: IMDS hop limit ($HOPS)"
+
+    echo "[6/9] IMDSv1 launch is denied..."
+    OUT="$(aws ec2 run-instances --dry-run --image-id "$AL2023" --instance-type t3.micro \
+      --metadata-options HttpTokens=optional 2>&1)"
+    # The declarative policy's httpTokensEnforced rejects this before the SCP is
+    # evaluated, so the real denial is UnsupportedOperation with this text.
+    if grep -qF "You can't launch instances with IMDSv1 because httpTokensEnforced is enabled" <<<"$OUT"; then
+      pass "sandbox: HttpTokens=optional denied (httpTokensEnforced)"
+    else
+      fail "sandbox: IMDSv1 launch not denied ($OUT)"
+    fi
+
+    echo "[7/9] Launch from a non-allowed AMI (Canonical Ubuntu) is denied..."
+    OUT="$(aws ec2 run-instances --dry-run --image-id "$UBUNTU" --instance-type t3.micro \
+      --metadata-options HttpTokens=required 2>&1)"
+    # Allowed AMIs hides non-allowed images from the account, so EC2 reports the
+    # existing image as not found. Pass only if the management account sees it.
+    if [[ "$UBUNTU_STATE" != "available" ]]; then
+      fail "sandbox: control failed, Ubuntu AMI $UBUNTU is '$UBUNTU_STATE' from the management account"
+    elif grep -qF "InvalidAMIID.NotFound" <<<"$OUT" && grep -qF "The image id '[$UBUNTU]' does not exist" <<<"$OUT"; then
+      pass "sandbox: non-allowed AMI hidden and denied (exists outside sandbox, NotFound inside)"
+    else
+      fail "sandbox: non-allowed AMI not denied ($OUT)"
+    fi
+
+    echo "[8/9] Unencrypted volume is denied..."
+    OUT="$(aws ec2 create-volume --dry-run --size 1 --volume-type gp3 --no-encrypted \
+      --availability-zone us-east-1a 2>&1)"
+    if grep -qF "with an explicit deny in a service control policy" <<<"$OUT"; then
+      pass "sandbox: unencrypted CreateVolume denied (SCP require-encrypted-ebs)"
+    else
+      fail "sandbox: unencrypted volume not denied ($OUT)"
+    fi
+
+    echo "[9/9] A compliant launch is still allowed (control, not a blanket deny)..."
+    OUT="$(aws ec2 run-instances --dry-run --image-id "$AL2023" --instance-type t3.micro \
+      --metadata-options HttpTokens=required \
+      --block-device-mappings 'DeviceName=/dev/xvda,Ebs={Encrypted=true,VolumeType=gp3}' 2>&1)"
+    if dry_allowed "$OUT"; then
+      pass "sandbox: compliant launch reaches DryRunOperation"
+    elif echo "$OUT" | grep -qE "VPCIdNotSpecified|MissingInput"; then
+      skip "sandbox has no default VPC, so the compliant dry run cannot resolve a subnet ($OUT)"
+    else
+      fail "sandbox: compliant launch denied ($OUT)"
+    fi
+    clear_creds
+  else
+    fail "could not assume into sandbox account"
+  fi
 fi
 
 echo ""

@@ -1,0 +1,43 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RequireIMDSv2OnLaunch",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:RunInstances"
+      ],
+      "Resource": "arn:aws:ec2:*:*:instance/*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_break-glass_*",
+            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_break-glass_*"
+          ]
+        },
+        "StringNotEquals": {
+          "ec2:MetadataHttpTokens": "required"
+        }
+      }
+    },
+    {
+      "Sid": "DenyIMDSv1Downgrade",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:ModifyInstanceMetadataOptions"
+      ],
+      "Resource": "arn:aws:ec2:*:*:instance/*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_break-glass_*",
+            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_break-glass_*"
+          ]
+        },
+        "StringEquals": {
+          "ec2:MetadataHttpTokens": "optional"
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,20 @@
 # AWS Landing Zone
 
+**Compute baseline status:** code and static gates complete on the
+`compute-baseline` branch; not yet applied. Sandbox-first IMDSv2 and EBS
+encryption SCPs, an EC2 declarative policy (Allowed AMIs), prod EC2 defaults, a
+hardened EKS launch template, a golden AMI pipeline baking the shared
+`cis_baseline` role, SSM patching, and a private management instance
+(`compute/`). The live sandbox denial proofs and the management-instance guest
+proof are written but not yet run. See [docs/compute-baseline.md](docs/compute-baseline.md).
+Existing verification below covers the earlier EKS/RDS and network demo.
+
+The public repository is
+[jordann6/aws-landing-zone](https://github.com/jordann6/aws-landing-zone).
+State moved to a dedicated backend under `aws-landing-zone/` keys
+([State backend](#state-backend)). Resource tags still carry the internal
+`aws-scp-governance` project name; renaming them is a separate change.
+
 A Terraform AWS landing zone with a persistent multi-account organization,
 inherited guardrails, centralized audit and security controls, and an inspected
 private workload network. The reference workload is private EKS and Multi-AZ
@@ -75,7 +90,8 @@ the network does not disable sharing for future demos.
 | `terraform/` | Audit, detective controls, identity and budgets | Retained baseline |
 | `observability/` | CloudWatch OAM links, central alarms and security findings routing | Retained baseline |
 | `network/` | Shared TGW, inspection VPC, firewall, NAT, endpoints and network logs | Temporary, hourly billing |
-| `workload/` | Private prod VPC, EKS, RDS, backup and image supply resources | Temporary, hourly billing |
+| `workload/` | Private prod VPC, EKS, RDS, backup, EC2 defaults, golden AMI pipeline and SSM patching | Temporary, hourly billing |
+| `compute/` | Hardened management instance from the golden AMI, SSM-only access | Temporary, destroyed first |
 
 Phase A observability is included in this repository. Its shared-services
 CloudWatch OAM sink, prod/network links, central alarms and security findings
@@ -119,9 +135,11 @@ VPC flow logs and firewall flow/alert logs support private access and investigat
 | PostgreSQL | Encrypted private Multi-AZ RDS with a managed secret; app-to-DB security group access on port 5432 and data subnet NACL |
 | Backup | Daily local AWS Backup and Vault Lock with a demo grace period; cross-region copy requires explicit region approval and opt-in |
 | Supply chain | Immutable ECR tags, scanning, pull-through cache, Inspector and an on-demand Image Builder pipeline |
+| Compute baseline | EBS default encryption on a CMK, IMDSv2 defaults, node launch template, STIG + `cis_baseline` golden AMI, SSM patch baseline; see [compute baseline](docs/compute-baseline.md) |
 
-The deployed node group uses the standard AL2023 EKS image. The Image Builder
-pipeline does not establish that a custom image was built or used. No application
+The deployed node group uses the standard AL2023 EKS image, which stays the node
+image by design. The golden AMI is for standalone instances; no golden AMI has
+been built yet. No application
 has been deployed to prove the permitted app-to-database path.
 
 ## Plan, prove and tear down
@@ -195,6 +213,7 @@ and destroys are run by the operator using reviewed, saved plans.
 
 - [Completion runbook](docs/completion.md): completed teardown, verification and closeout steps.
 - [Separate security cleanup](docs/security-cleanup.md): retired state-history cleanup without redeploying the gateway.
+- [Compute baseline](docs/compute-baseline.md): guardrails, golden AMI, patching, management instance and their proofs.
 - [CIS mapping](docs/cis-mapping.md): controls mapped to resources and policies, with scope limitations.
 - [Access model](docs/access-model.md): personas, account scope and permissions.
 - [Data tier](docs/data-tier.md): segmentation, backup policy and availability design; proof limits are explicit.

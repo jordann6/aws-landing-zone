@@ -6,12 +6,13 @@
 # eks-failed-nodes alarm (observability/alarms.tf).
 
 data "aws_iam_policy_document" "cloudwatch_agent_trust" {
+  count = var.enable_eks ? 1 : 0
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     effect  = "Allow"
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+      identifiers = [aws_iam_openid_connect_provider.eks[0].arn]
     }
     condition {
       test     = "StringEquals"
@@ -27,19 +28,22 @@ data "aws_iam_policy_document" "cloudwatch_agent_trust" {
 }
 
 resource "aws_iam_role" "cloudwatch_agent" {
+  count              = var.enable_eks ? 1 : 0
   name               = "prod-cloudwatch-agent"
-  assume_role_policy = data.aws_iam_policy_document.cloudwatch_agent_trust.json
+  assume_role_policy = data.aws_iam_policy_document.cloudwatch_agent_trust[0].json
 }
 
 resource "aws_iam_role_policy_attachment" "cloudwatch_agent" {
-  role       = aws_iam_role.cloudwatch_agent.name
+  count      = var.enable_eks ? 1 : 0
+  role       = aws_iam_role.cloudwatch_agent[0].name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
 resource "aws_eks_addon" "cloudwatch_observability" {
-  cluster_name             = aws_eks_cluster.prod.name
+  count                    = var.enable_eks ? 1 : 0
+  cluster_name             = aws_eks_cluster.prod[0].name
   addon_name               = "amazon-cloudwatch-observability"
-  service_account_role_arn = aws_iam_role.cloudwatch_agent.arn
+  service_account_role_arn = aws_iam_role.cloudwatch_agent[0].arn
 
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"

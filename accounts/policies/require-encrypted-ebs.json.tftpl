@@ -1,0 +1,41 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyUnencryptedEBS",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:RunInstances",
+        "ec2:CreateVolume"
+      ],
+      "Resource": "arn:aws:ec2:*:*:volume/*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_break-glass_*",
+            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_break-glass_*"
+          ]
+        },
+        "Bool": {
+          "ec2:Encrypted": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyDisablingEBSDefaultEncryption",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:DisableEbsEncryptionByDefault"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_break-glass_*",
+            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_break-glass_*"
+          ]
+        }
+      }
+    }
+  ]
+}

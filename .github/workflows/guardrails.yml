@@ -58,6 +58,12 @@ jobs:
     with:
       terraform_dir: observability
 
+  # The compute/ root: the hardened management instance from the golden AMI.
+  static_compute:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.4.0
+    with:
+      terraform_dir: compute
+
   # The FinOps allocation policy (CostCenter) already runs inside `static`, since
   # tf-ci.yml evaluates the whole shared policy/ set. These jobs add the cost
   # *threshold*: a PR that raises a billable root's projected monthly cost by more

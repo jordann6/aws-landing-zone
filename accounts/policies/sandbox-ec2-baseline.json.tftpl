@@ -1,0 +1,70 @@
+{
+  "ec2_attributes": {
+    "exception_message": {
+      "@@assign": "Sandbox compute baseline policy denied this request. Contact the platform owner for reviewed recovery."
+    },
+    "serial_console_access": {
+      "status": {
+        "@@assign": "disabled"
+      }
+    },
+    "image_block_public_access": {
+      "state": {
+        "@@assign": "block_new_sharing"
+      }
+    },
+    "snapshot_block_public_access": {
+      "state": {
+        "@@assign": "block_all_sharing"
+      }
+    },
+    "instance_metadata_defaults": {
+      "http_tokens": {
+        "@@assign": "required"
+      },
+      "http_tokens_enforced": {
+        "@@assign": "enabled"
+      },
+      "http_put_response_hop_limit": {
+        "@@assign": "1"
+      },
+      "http_endpoint": {
+        "@@assign": "enabled"
+      },
+      "instance_metadata_tags": {
+        "@@assign": "disabled"
+      }
+    },
+    "allowed_images_settings": {
+      "state": {
+        "@@assign": "enabled"
+      },
+      "image_criteria": {
+        "criteria_1": {
+          "allowed_image_providers": {
+            "@@assign": [
+              "amazon"
+            ]
+          },
+          "image_names": {
+            "@@assign": [
+              "al2023-ami-*-x86_64"
+            ]
+          }
+        }%{ if golden_ami_owner_account_id != null },
+        "criteria_2": {
+          "allowed_image_providers": {
+            "@@assign": [
+              "${golden_ami_owner_account_id}"
+            ]
+          },
+          "image_names": {
+            "@@assign": [
+              "lz-hardened-al2023-*"
+            ]
+          }
+        }%{ endif }
+      }
+    }
+  }
+}
