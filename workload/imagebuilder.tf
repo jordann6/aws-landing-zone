@@ -284,7 +284,7 @@ resource "aws_imagebuilder_distribution_configuration" "hardened" {
         GoldenImage        = "true"
         CisBaseline        = var.cis_baseline_release
         StigLevel          = var.stig_component_level
-        Project            = "aws-scp-governance"
+        Project            = "aws-landing-zone"
         Environment        = "prod"
         Owner              = var.owner
         CostCenter         = var.cost_center
