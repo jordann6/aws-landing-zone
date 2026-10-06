@@ -12,11 +12,12 @@ terraform {
   # layer can be deployed for a demo and destroyed on its own without touching
   # the always-on governance state.
   backend "s3" {
-    bucket       = "tf-state-jordprojs"
-    key          = "aws-scp-governance/network.tfstate"
+    bucket       = "jordann6-aws-landing-zone-tfstate"
+    key          = "aws-landing-zone/network.tfstate"
     region       = "us-east-1"
     use_lockfile = true
     encrypt      = true
+    kms_key_id   = "alias/aws-landing-zone-tfstate"
   }
 }
 
@@ -45,8 +46,8 @@ provider "aws" {
 data "terraform_remote_state" "accounts" {
   backend = "s3"
   config = {
-    bucket = "tf-state-jordprojs"
-    key    = "aws-scp-governance/accounts.tfstate"
+    bucket = "jordann6-aws-landing-zone-tfstate"
+    key    = "aws-landing-zone/accounts.tfstate"
     region = "us-east-1"
   }
   lifecycle {

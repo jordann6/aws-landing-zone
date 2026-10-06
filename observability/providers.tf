@@ -16,11 +16,12 @@ terraform {
   # Nearly free while up (two KMS keys, a handful of alarms) and destroyed with
   # the rest of the stack.
   backend "s3" {
-    bucket       = "tf-state-jordprojs"
-    key          = "aws-scp-governance/observability.tfstate"
+    bucket       = "jordann6-aws-landing-zone-tfstate"
+    key          = "aws-landing-zone/observability.tfstate"
     region       = "us-east-1"
     use_lockfile = true
     encrypt      = true
+    kms_key_id   = "alias/aws-landing-zone-tfstate"
   }
 }
 

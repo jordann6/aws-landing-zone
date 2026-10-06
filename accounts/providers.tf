@@ -10,11 +10,12 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "tf-state-jordprojs"
-    key          = "aws-scp-governance/accounts.tfstate"
+    bucket       = "jordann6-aws-landing-zone-tfstate"
+    key          = "aws-landing-zone/accounts.tfstate"
     region       = "us-east-1"
     use_lockfile = true
     encrypt      = true
+    kms_key_id   = "alias/aws-landing-zone-tfstate"
   }
 }
 

@@ -2,11 +2,18 @@ locals {
   sub_prefix    = "repo:${var.github_org}/${var.github_repo}"
   state_bucket  = "arn:aws:s3:::${var.state_bucket}"
   state_objects = "arn:aws:s3:::${var.state_bucket}/${var.state_key_prefix}/*"
+  legacy_states = var.legacy_state_bucket == "" ? [] : [{
+    bucket  = "arn:aws:s3:::${var.legacy_state_bucket}"
+    objects = "arn:aws:s3:::${var.legacy_state_bucket}/${var.legacy_state_key_prefix}/*"
+    prefix  = "${var.legacy_state_key_prefix}/*"
+  }]
 }
 
 # --- Shared state access (both roles read/write this repo's state) ------------
 # use_lockfile stores the lock as an S3 object beside the state, so both roles
 # need Put/Delete on the object prefix, not just Get. No DynamoDB table exists.
+# State is SSE-KMS under the dedicated CMK, so both roles also need the key,
+# and only through S3.
 data "aws_iam_policy_document" "state_access" {
   statement {
     sid       = "ListStateBucket"
@@ -22,6 +29,40 @@ data "aws_iam_policy_document" "state_access" {
     sid       = "ReadWriteState"
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = [local.state_objects]
+  }
+  statement {
+    sid       = "UseStateKey"
+    actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey"]
+    resources = [aws_kms_key.state.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.${var.region}.amazonaws.com"]
+    }
+  }
+
+  # Transitional legacy grant (SSE-S3 there, so no KMS). Dropped by setting
+  # legacy_state_bucket = "".
+  dynamic "statement" {
+    for_each = local.legacy_states
+    content {
+      sid       = "ListLegacyStateBucket"
+      actions   = ["s3:ListBucket"]
+      resources = [statement.value.bucket]
+      condition {
+        test     = "StringLike"
+        variable = "s3:prefix"
+        values   = [statement.value.prefix]
+      }
+    }
+  }
+  dynamic "statement" {
+    for_each = local.legacy_states
+    content {
+      sid       = "ReadWriteLegacyState"
+      actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+      resources = [statement.value.objects]
+    }
   }
 }
 
@@ -54,6 +95,7 @@ data "aws_iam_policy_document" "plan_trust" {
 }
 
 data "aws_iam_policy_document" "plan_permissions" {
+  # checkov:skip=CKV_AWS_356:organizations:Describe*/List* and sts:GetCallerIdentity do not support resource-level scoping.
   statement {
     sid       = "ReadOrganization"
     actions   = ["organizations:Describe*", "organizations:List*"]
@@ -118,6 +160,8 @@ data "aws_iam_policy_document" "apply_trust" {
 # API need, and nothing beyond that. The reviewer gate, not IAM resource scoping,
 # is what constrains when this is used.
 data "aws_iam_policy_document" "apply_permissions" {
+  # checkov:skip=CKV_AWS_111:Most organizations:* actions do not support resource-level scoping; the reviewer-gated environment is the control (see comment above).
+  # checkov:skip=CKV_AWS_356:Same: organizations:* and sts:GetCallerIdentity cannot be scoped to resources.
   statement {
     sid       = "ManageOrganization"
     actions   = ["organizations:*"]

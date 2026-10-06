@@ -32,6 +32,12 @@ jobs:
     with:
       terraform_dir: accounts
 
+  # The bootstrap/ root: CI OIDC roles and the dedicated state backend (ADR-0003).
+  static_bootstrap:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.4.0
+    with:
+      terraform_dir: bootstrap
+
   # The network/ root is a separate root module (the timed inspection layer), so
   # it gets its own static gate.
   static_network:
