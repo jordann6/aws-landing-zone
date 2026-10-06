@@ -32,7 +32,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "aws-scp-governance"
+      Project     = "aws-landing-zone"
       Environment = "network"
       Owner       = var.owner
       ManagedBy   = "terraform"

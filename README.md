@@ -12,8 +12,8 @@ Existing verification below covers the earlier EKS/RDS and network demo.
 The public repository is
 [jordann6/aws-landing-zone](https://github.com/jordann6/aws-landing-zone).
 State moved to a dedicated backend under `aws-landing-zone/` keys
-([State backend](#state-backend)). Resource tags still carry the internal
-`aws-scp-governance` project name; renaming them is a separate change.
+([State backend](#state-backend)). Resource tags carry
+`Project = aws-landing-zone`.
 
 A Terraform AWS landing zone with a persistent multi-account organization,
 inherited guardrails, centralized audit and security controls, and an inspected

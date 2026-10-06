@@ -31,7 +31,7 @@ provider "aws" {
   # static policy can read the keys. Per-resource tags still override.
   default_tags {
     tags = {
-      Project     = "aws-scp-governance"
+      Project     = "aws-landing-zone"
       Environment = "platform"
       Owner       = var.owner
       ManagedBy   = "terraform"
@@ -56,7 +56,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "aws-scp-governance"
+      Project     = "aws-landing-zone"
       Environment = "log-archive"
       Owner       = var.owner
       ManagedBy   = "terraform"
@@ -75,7 +75,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "aws-scp-governance"
+      Project     = "aws-landing-zone"
       Environment = "security"
       Owner       = var.owner
       ManagedBy   = "terraform"

@@ -27,7 +27,7 @@ provider "aws" {
   # static OPA policy can read the keys.
   default_tags {
     tags = {
-      Project     = "aws-scp-governance"
+      Project     = "aws-landing-zone"
       Environment = "platform"
       Owner       = var.owner
       ManagedBy   = "terraform"
