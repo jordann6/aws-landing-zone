@@ -15,11 +15,12 @@ terraform {
   # Its own state. This is the paved-road prod workload (data tier + EKS): the
   # hourly-billed layer, deployed for a demo and destroyed on its own.
   backend "s3" {
-    bucket       = "tf-state-jordprojs"
-    key          = "aws-scp-governance/workload.tfstate"
+    bucket       = "jordann6-aws-landing-zone-tfstate"
+    key          = "aws-landing-zone/workload.tfstate"
     region       = "us-east-1"
     use_lockfile = true
     encrypt      = true
+    kms_key_id   = "alias/aws-landing-zone-tfstate"
   }
 }
 

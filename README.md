@@ -156,6 +156,25 @@ windows, Secrets Manager recovery windows, retained storage and baseline service
 can leave residual charges after the hourly layers are gone. Check billing after
 the reporting data catches up.
 
+## State backend
+
+Every root keeps state in a dedicated bucket that `bootstrap/state_backend.tf`
+owns ([ADR-0003](docs/adr/0003-dedicated-state-backend.md)), under
+`aws-landing-zone/<root>.tfstate`.
+
+| Control | Implementation |
+|---|---|
+| Cannot be deleted by a plan | `lifecycle { prevent_destroy = true }` on the bucket and the CMK |
+| Recoverable history | Versioning; noncurrent versions expire only beyond the newest 20 and after 90 days; incomplete uploads abort after 7 days |
+| Encrypted under a key this repo controls | SSE-KMS on a rotated CMK with bucket keys; every backend sets `kms_key_id`, and the bucket policy refuses SSE-S3 uploads |
+| Never public, never plaintext in transit | All four public access blocks, `BucketOwnerEnforced`, and a bucket policy denying non-TLS and TLS below 1.2 |
+| No concurrent writers | `use_lockfile = true` (S3 lock object, no DynamoDB table) |
+
+The CI roles get the bucket prefix and the CMK only through S3
+(`kms:ViaService`). Migration from the legacy shared bucket is
+`scripts/migrate-state-backend.sh phase1|phase2`; it never deletes the legacy
+objects.
+
 ## Validation and CI
 
 CI runs the shared [platform-guardrails](https://github.com/jordann6/platform-guardrails)
@@ -179,5 +198,6 @@ and destroys are run by the operator using reviewed, saved plans.
 - [CIS mapping](docs/cis-mapping.md): controls mapped to resources and policies, with scope limitations.
 - [Access model](docs/access-model.md): personas, account scope and permissions.
 - [Data tier](docs/data-tier.md): segmentation, backup policy and availability design; proof limits are explicit.
+- [State backend decision](docs/adr/0003-dedicated-state-backend.md): dedicated, KMS-encrypted backend instead of the shared bucket.
 - [Architecture decision](docs/accelerator-vs-bespoke.md): bespoke Terraform versus Control Tower and Landing Zone Accelerator.
 - [Diagram source](docs/diagram.py): official AWS icons via the mingrammer `diagrams` library. Regenerate with `python3 docs/diagram.py` after installing `diagrams` and Graphviz.

@@ -4,8 +4,8 @@
 data "terraform_remote_state" "accounts" {
   backend = "s3"
   config = {
-    bucket = "tf-state-jordprojs"
-    key    = "aws-scp-governance/accounts.tfstate"
+    bucket = "jordann6-aws-landing-zone-tfstate"
+    key    = "aws-landing-zone/accounts.tfstate"
     region = "us-east-1"
   }
 }

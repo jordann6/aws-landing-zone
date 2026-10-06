@@ -17,13 +17,34 @@ variable "github_repo" {
 }
 
 variable "state_bucket" {
-  description = "S3 bucket holding this repo's Terraform state (CI roles need access to it)"
+  description = "Dedicated S3 bucket holding this repo's Terraform state, created by state_backend.tf (ADR-0003). No account id in the name."
+  type        = string
+  default     = "jordann6-aws-landing-zone-tfstate"
+}
+
+variable "state_kms_alias" {
+  description = "Alias of the customer-managed key that encrypts the state bucket. Every backend block sets kms_key_id to this alias."
+  type        = string
+  default     = "alias/aws-landing-zone-tfstate"
+}
+
+variable "state_key_prefix" {
+  description = "Key prefix within the state bucket this repo owns"
+  type        = string
+  default     = "aws-landing-zone"
+}
+
+# Transitional: keeps the CI roles able to read and write the legacy shared
+# bucket while state is migrated and open branches rebase. Set both to "" in the
+# follow-up change once no branch points at the old backend (ADR-0003).
+variable "legacy_state_bucket" {
+  description = "Legacy shared state bucket the CI roles keep access to during the migration. Empty drops the grant."
   type        = string
   default     = "tf-state-jordprojs"
 }
 
-variable "state_key_prefix" {
-  description = "Key prefix within the state bucket this repo owns. Keeps the pre-rename name (aws-scp-governance) because the live state objects live under it."
+variable "legacy_state_key_prefix" {
+  description = "This repo's key prefix in the legacy shared bucket"
   type        = string
   default     = "aws-scp-governance"
 }

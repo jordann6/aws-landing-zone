@@ -30,7 +30,7 @@ def main():
 
     def outputs(name):
         obj = s3.get_object(
-            Bucket="tf-state-jordprojs", Key=f"aws-scp-governance/{name}.tfstate",
+            Bucket="jordann6-aws-landing-zone-tfstate", Key=f"aws-landing-zone/{name}.tfstate",
             ExpectedBucketOwner=owner,
         )
         document = json.loads(obj["Body"].read())

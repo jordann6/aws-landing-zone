@@ -24,3 +24,7 @@ infracost.json
 
 # one-time state migration output (holds account ids)
 migrate_imports.tf
+
+# scripts/migrate-state-backend.sh temporaries
+backend_override.tf
+.migrate-init.log
