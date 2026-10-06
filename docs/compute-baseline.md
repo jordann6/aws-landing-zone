@@ -20,7 +20,7 @@ Tests are written but not yet run against AWS.
 | IMDSv2 required at launch, no downgrade | SCP `require-imdsv2` | `run-instances --metadata-options HttpTokens=optional` is denied |
 | No unencrypted EBS; default encryption cannot be disabled | SCP `require-encrypted-ebs` | `create-volume --no-encrypted` is denied |
 | Allowed AMIs: Amazon AL2023 plus golden AMIs owned by prod | Declarative policy `sandbox-ec2-baseline` (`allowed_images_settings`) | Canonical Ubuntu AMI is denied; compliant AL2023 launch reaches `DryRunOperation` |
-| IMDS defaults enforced, serial console off, AMI and snapshot public sharing blocked | Same declarative policy | `get-allowed-images-settings`, `get-instance-metadata-defaults` in sandbox |
+| IMDS defaults enforced (IMDSv2 required, hop limit 1), serial console off, AMI and snapshot public sharing blocked | Same declarative policy | `get-allowed-images-settings`, `get-instance-metadata-defaults` (tokens `required`, hop limit `1`) in sandbox |
 
 Both SCPs exempt only the sandbox account's Identity Center break-glass role
 (`breakglass:sandbox` assignment in the governance root). The rollout attaches to
@@ -31,6 +31,13 @@ AMIs criteria, so promotion will not block it.
 Declarative policies apply to the account's EC2 service attributes, not to IAM.
 They hold even against a principal that an SCP would exempt. That is why the
 SCPs and the declarative policy layer on each other rather than duplicate.
+
+The break-glass exemption therefore covers EBS encryption only in practice.
+`http_tokens_enforced` and Allowed AMIs bind the break-glass role too, so it
+cannot launch an IMDSv1 instance or a non-allowed AMI in sandbox. This is
+deliberate: break-glass exists to recover access and state, not to run
+non-compliant compute. Relaxing either control means editing the declarative
+policy through a reviewed accounts plan.
 
 ## 2. Account defaults (workload root, prod account)
 

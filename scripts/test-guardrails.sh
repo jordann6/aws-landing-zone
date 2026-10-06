@@ -87,6 +87,8 @@ else
     [[ "$STATE" == "enabled" ]] && pass "sandbox: Allowed AMIs enabled" || fail "sandbox: Allowed AMIs ($STATE)"
     TOKENS="$(aws ec2 get-instance-metadata-defaults --query AccountLevel.HttpTokens --output text 2>&1)"
     [[ "$TOKENS" == "required" ]] && pass "sandbox: IMDSv2 required by default" || fail "sandbox: IMDS default ($TOKENS)"
+    HOPS="$(aws ec2 get-instance-metadata-defaults --query AccountLevel.HttpPutResponseHopLimit --output text 2>&1)"
+    [[ "$HOPS" == "1" ]] && pass "sandbox: IMDS hop limit 1 by default" || fail "sandbox: IMDS hop limit ($HOPS)"
 
     echo "[6/9] IMDSv1 launch is denied..."
     OUT="$(aws ec2 run-instances --dry-run --image-id "$AL2023" --instance-type t3.micro \
