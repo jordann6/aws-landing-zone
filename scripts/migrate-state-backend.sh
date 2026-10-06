@@ -60,8 +60,19 @@ object_exists() { aws s3api head-object --bucket "$1" --key "$2" >/dev/null 2>&1
 
 count_state() {
   local out
-  out="$(terraform -chdir="$ROOT/$1" state list 2>&1)" || die "$1: state list failed: $out"
+  if ! out="$(terraform -chdir="$ROOT/$1" state list 2>&1)"; then
+    # state list refuses a state with no resources (a destroyed hourly layer).
+    grep -qF "No state file was found!" <<<"$out" && { echo 0; return 0; }
+    die "$1: state list failed: $out"
+  fi
   grep -c . <<<"$out" || true
+}
+
+# A 0-resource state must also carry no outputs before it is treated as empty.
+outputs_empty() {
+  local out
+  out="$(terraform -chdir="$ROOT/$1" output -json 2>&1)" || die "$1: output -json failed: $out"
+  [[ "$(tr -d '[:space:]' <<<"$out")" == "{}" ]]
 }
 
 tf_init() {
@@ -107,7 +118,18 @@ phase2() {
     write_override "$r"
     tf_init "$r" -reconfigure
     before="$(count_state "$r")" || exit 1
+    if [[ "$before" == "0" ]]; then
+      outputs_empty "$r" || die "$r: legacy state has 0 resources but still has outputs; resolve by hand"
+    fi
     rm -f "$ROOT/$r/backend_override.tf"
+
+    # Terraform copies nothing from an empty state, so there is no object to
+    # verify. Point the root at the new backend; its next apply creates the key.
+    if [[ "$before" == "0" ]] && ! object_exists "$NEW_BUCKET" "$NEW_PREFIX/$r.tfstate"; then
+      tf_init "$r" -reconfigure
+      echo "  empty: 0 resources, 0 outputs on the legacy backend; nothing to copy, now initialized on $NEW_BUCKET"
+      continue
+    fi
 
     if object_exists "$NEW_BUCKET" "$NEW_PREFIX/$r.tfstate"; then
       tf_init "$r" -reconfigure
