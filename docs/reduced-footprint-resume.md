@@ -6,7 +6,7 @@ reduced footprint. The canonical design is unchanged in code (all toggles defaul
 
 ## What is deployed now (reduced footprint)
 
-- Organization (imported: `o-rpfh5h9ite`), OUs, all SCPs, tag policy fixed but
+- Organization (imported), OUs, all SCPs, tag policy fixed but
   gated off, budget.
 - Accounts: `security`, `log-archive`, `sandbox` only. `dev/test/prod/network/
   shared-services` gated off via `full_account_set = false`.
@@ -46,7 +46,8 @@ The org has 4 active accounts against a limit of 10, so the 5 gated accounts fit
    fails with "Account is already subscribed":
 
    ```
-   terraform -chdir=terraform import 'aws_securityhub_account.security[0]' 991166714466
+   terraform -chdir=terraform import 'aws_securityhub_account.security[0]' \
+     "$(terraform -chdir=accounts output -raw security_account_id)"
    ```
 
    The `cis` subscription (v1.4.0) and the org admin / org configuration are NOT

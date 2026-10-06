@@ -20,17 +20,17 @@ Execution holds the Terraform S3 lock and stops if the current state changes.
 Seven safety tests passed, including read-only preview, exact-key deletion,
 concurrent-state change, lock contention and dirty-state rejection.
 
-State-history cleanup is complete. Recheck it with this read-only command:
+State-history cleanup is complete. Recheck it from the llm-gateway checkout with this read-only command:
 
 ```bash
-python3 /Users/jordannelson/Desktop/llm-gateway/scripts/secrets.py prune-history
+python3 scripts/secrets.py prune-history
 ```
 
 The authorized command below has already completed; it is recorded for audit
 and does not need to be repeated:
 
 ```bash
-python3 /Users/jordannelson/Desktop/llm-gateway/scripts/secrets.py prune-history --execute
+python3 scripts/secrets.py prune-history --execute
 ```
 
 Post-execution preview and an independent metadata check confirmed zero obsolete
