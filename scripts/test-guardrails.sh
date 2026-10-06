@@ -66,10 +66,8 @@ fi
 
 # ---- compute baseline (sandbox OU) --------------------------------------------
 skip() { echo "  SKIP: $1"; }
-# A dry run that passes authorization fails with DryRunOperation; one that is
-# denied by an SCP or the declarative policy fails with UnauthorizedOperation (or
-# the declarative policy's exception message).
-dry_denied() { echo "$1" | grep -qE "UnauthorizedOperation|not allowed|Sandbox compute baseline policy denied"; }
+# A dry run that passes authorization fails with DryRunOperation. Each denial
+# below matches the exact text its layer returns (verified live 2026-10-06).
 dry_allowed() { echo "$1" | grep -q "DryRunOperation"; }
 
 ATTACHED="$(aws organizations list-policies-for-target --target-id "$SANDBOX_OU_ID" \
@@ -81,6 +79,10 @@ else
     --query Parameter.Value --output text)"
   UBUNTU="$(aws ssm get-parameter --name /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id \
     --query Parameter.Value --output text)"
+  # Control for [7/9]: the Ubuntu AMI must exist (seen from the management
+  # account, which has no Allowed AMIs policy). Otherwise a deleted image would
+  # pass as "denied".
+  UBUNTU_STATE="$(aws ec2 describe-images --image-ids "$UBUNTU" --query 'Images[0].State' --output text 2>&1)"
   if assume "$SANDBOX_ACCOUNT_ID"; then
     echo "[5/9] Declarative policy is in effect in the sandbox account..."
     STATE="$(aws ec2 get-allowed-images-settings --query State --output text 2>&1)"
@@ -93,17 +95,35 @@ else
     echo "[6/9] IMDSv1 launch is denied..."
     OUT="$(aws ec2 run-instances --dry-run --image-id "$AL2023" --instance-type t3.micro \
       --metadata-options HttpTokens=optional 2>&1)"
-    dry_denied "$OUT" && pass "sandbox: HttpTokens=optional denied" || fail "sandbox: IMDSv1 launch not denied ($OUT)"
+    # The declarative policy's httpTokensEnforced rejects this before the SCP is
+    # evaluated, so the real denial is UnsupportedOperation with this text.
+    if grep -qF "You can't launch instances with IMDSv1 because httpTokensEnforced is enabled" <<<"$OUT"; then
+      pass "sandbox: HttpTokens=optional denied (httpTokensEnforced)"
+    else
+      fail "sandbox: IMDSv1 launch not denied ($OUT)"
+    fi
 
     echo "[7/9] Launch from a non-allowed AMI (Canonical Ubuntu) is denied..."
     OUT="$(aws ec2 run-instances --dry-run --image-id "$UBUNTU" --instance-type t3.micro \
       --metadata-options HttpTokens=required 2>&1)"
-    dry_denied "$OUT" && pass "sandbox: non-allowed AMI denied" || fail "sandbox: non-allowed AMI not denied ($OUT)"
+    # Allowed AMIs hides non-allowed images from the account, so EC2 reports the
+    # existing image as not found. Pass only if the management account sees it.
+    if [[ "$UBUNTU_STATE" != "available" ]]; then
+      fail "sandbox: control failed, Ubuntu AMI $UBUNTU is '$UBUNTU_STATE' from the management account"
+    elif grep -qF "InvalidAMIID.NotFound" <<<"$OUT" && grep -qF "The image id '[$UBUNTU]' does not exist" <<<"$OUT"; then
+      pass "sandbox: non-allowed AMI hidden and denied (exists outside sandbox, NotFound inside)"
+    else
+      fail "sandbox: non-allowed AMI not denied ($OUT)"
+    fi
 
     echo "[8/9] Unencrypted volume is denied..."
     OUT="$(aws ec2 create-volume --dry-run --size 1 --volume-type gp3 --no-encrypted \
       --availability-zone us-east-1a 2>&1)"
-    dry_denied "$OUT" && pass "sandbox: unencrypted CreateVolume denied" || fail "sandbox: unencrypted volume not denied ($OUT)"
+    if grep -qF "with an explicit deny in a service control policy" <<<"$OUT"; then
+      pass "sandbox: unencrypted CreateVolume denied (SCP require-encrypted-ebs)"
+    else
+      fail "sandbox: unencrypted volume not denied ($OUT)"
+    fi
 
     echo "[9/9] A compliant launch is still allowed (control, not a blanket deny)..."
     OUT="$(aws ec2 run-instances --dry-run --image-id "$AL2023" --instance-type t3.micro \

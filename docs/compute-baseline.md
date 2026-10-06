@@ -9,17 +9,18 @@ reachable only through the cloud's private access path.
 > One hardening role, three image pipelines, three enforcement points: Azure
 > Policy approved-image deny, GCP `compute.trustedImageProjects`, AWS Allowed AMIs.
 
-**Status:** code and static gates are complete. Nothing in this layer is applied
-yet. The accounts root (SCPs and declarative policy) is live and plans additively.
-Tests are written but not yet run against AWS.
+**Status:** the Sandbox OU guardrails are live (applied 2026-10-06) and proven by
+`scripts/test-guardrails.sh` sections 5 to 9, 11/11 passing. The workload
+defaults, golden AMI, patching and management instance are code-complete and not
+yet applied.
 
 ## 1. Preventive guardrails (accounts root, Sandbox OU first)
 
 | Control | Implementation | Proof (`scripts/test-guardrails.sh`, free `--dry-run`) |
 |---|---|---|
-| IMDSv2 required at launch, no downgrade | SCP `require-imdsv2` | `run-instances --metadata-options HttpTokens=optional` is denied |
-| No unencrypted EBS; default encryption cannot be disabled | SCP `require-encrypted-ebs` | `create-volume --no-encrypted` is denied |
-| Allowed AMIs: Amazon AL2023 plus golden AMIs owned by prod | Declarative policy `sandbox-ec2-baseline` (`allowed_images_settings`) | Canonical Ubuntu AMI is denied; compliant AL2023 launch reaches `DryRunOperation` |
+| IMDSv2 required at launch, no downgrade | SCP `require-imdsv2` | `run-instances --metadata-options HttpTokens=optional` is denied. Live, the declarative policy's `httpTokensEnforced` rejects it first (`UnsupportedOperation`), so the SCP is the second layer |
+| No unencrypted EBS; default encryption cannot be disabled | SCP `require-encrypted-ebs` | `create-volume --no-encrypted` is denied by an explicit SCP deny |
+| Allowed AMIs: Amazon AL2023 plus golden AMIs owned by prod | Declarative policy `sandbox-ec2-baseline` (`allowed_images_settings`) | Canonical Ubuntu AMI is hidden: it is `available` from the management account but `InvalidAMIID.NotFound` in sandbox. Compliant AL2023 launch reaches `DryRunOperation` |
 | IMDS defaults enforced (IMDSv2 required, hop limit 1), serial console off, AMI and snapshot public sharing blocked | Same declarative policy | `get-allowed-images-settings`, `get-instance-metadata-defaults` (tokens `required`, hop limit `1`) in sandbox |
 
 Both SCPs exempt only the sandbox account's Identity Center break-glass role
