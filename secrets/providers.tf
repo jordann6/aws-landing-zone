@@ -32,23 +32,6 @@ provider "aws" {
 }
 
 provider "aws" {
-  alias  = "security"
-  region = var.region
-  assume_role {
-    role_arn = "arn:aws:iam::${local.acct.security_account_id}:role/OrganizationAccountAccessRole"
-  }
-  default_tags {
-    tags = {
-      Project     = "aws-landing-zone"
-      Environment = "platform"
-      Owner       = var.owner
-      ManagedBy   = "terraform"
-      CostCenter  = var.cost_center
-    }
-  }
-}
-
-provider "aws" {
   alias  = "log_archive"
   region = var.region
   assume_role {

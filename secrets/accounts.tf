@@ -11,6 +11,6 @@ data "terraform_remote_state" "accounts" {
 
 locals {
   acct               = data.terraform_remote_state.accounts.outputs
-  scanner_account_id = coalesce(var.scanner_account_id, local.acct.management_account_id)
+  scanner_account_id = local.acct.security_account_id
   scanner_role_arn   = "arn:aws:iam::${local.scanner_account_id}:role/${var.scanner_prefix}-scanner-role"
 }

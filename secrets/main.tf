@@ -1,15 +1,8 @@
-# One metadata-only scan-target role per member account. The scanner itself
-# stays in its home account (~/aws-secrets-lifecycle); each role trusts only
-# that exact scanner role, inside this organization.
-module "security" {
-  source             = "./modules/scan-target"
-  providers          = { aws = aws.security }
-  scanner_role_arn   = local.scanner_role_arn
-  scanner_account_id = local.scanner_account_id
-  organization_id    = local.acct.organization_id
-  role_name          = "${var.scanner_prefix}-scan-target-role"
-}
-
+# One metadata-only scan-target role per member account. The scanner runs in
+# the security account (the GuardDuty and Security Hub delegated admin), never
+# in management. Its own deployment creates the security account's target
+# role, so this root covers the other seven. Each role trusts only that exact
+# scanner role, inside this organization.
 module "log_archive" {
   source             = "./modules/scan-target"
   providers          = { aws = aws.log_archive }

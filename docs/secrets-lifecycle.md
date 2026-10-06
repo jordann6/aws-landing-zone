@@ -2,25 +2,35 @@
 
 The `secrets/` root grants the secrets-lifecycle scanner
 ([aws-secrets-lifecycle](https://github.com/jordann6/aws-secrets-lifecycle))
-metadata-only access to all eight member accounts. The scanner stays in its
-home account (the management account by default, overridable with
-`scanner_account_id`). Account ids come from the persistent `accounts/` state;
-none are hardcoded.
+metadata-only access to all eight member accounts. The scanner runs in the
+security account, the GuardDuty and Security Hub delegated admin, never in
+management: management is exempt from SCPs and should hold only org-level
+resources. Account ids come from the persistent `accounts/` state; none are
+hardcoded.
 
 Status: code complete, not yet applied. The live proof below is pending.
 
 ## Access model
 
-Each member account gets one `secops-scan-target-role`. Its trust policy allows
-only the exact scanner role ARN, and only from inside this organization
-(`aws:PrincipalOrgID`). Metadata permissions are scoped to the target account
+Each member account gets one `secops-scan-target-role`. This root creates seven
+of them; the scanner's own deployment creates the security account's. Each
+trust policy allows only the exact scanner role ARN, and this root's seven also
+require the caller to be inside this organization (`aws:PrincipalOrgID`). Metadata permissions are scoped to the target account
 wherever the API supports resource-level IAM. Explicit denies block
 `GetSecretValue`, `BatchGetSecretValue`, every SSM parameter read and
 `kms:Decrypt`, so the scanner can inventory and age credentials but never read
 one.
 
 The scanner side restricts its own `sts:AssumeRole` to exactly the ARNs this
-root outputs, passed in through a gitignored variable file.
+root outputs, passed in through a gitignored variable file. That file also sets
+the security-account deploy role, turns off Security Hub enablement (the
+security account already runs it) and keeps the dashboard private, since it
+lists secret names and the principals that read them.
+
+The analyzer's consumer mapping reads a single-account trail in the security
+account, so consumer maps cover the home account only. Mapping consumers across
+the organization would mean querying the org trail in log-archive; that is not
+built.
 
 ## Ninety-day monitoring
 
@@ -52,8 +62,9 @@ python3 scripts/export-scan-targets.py \
   --destination ../aws-secrets-lifecycle/terraform/lz-targets.tfvars.json
 ```
 
-The export writes only role ARNs to a mode-0600, gitignored variable file. Use
-`--plan` to export from the reviewed saved plan before it is applied.
+The export writes role ARNs and scanner settings to a mode-0600, gitignored
+variable file. Use `--plan` to export from the reviewed saved plan before it is
+applied.
 
 ```bash
 make -C ../aws-secrets-lifecycle build
