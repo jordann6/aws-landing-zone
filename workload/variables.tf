@@ -155,3 +155,9 @@ variable "imagebuilder_instance_type" {
   type        = string
   default     = "t3.small"
 }
+
+variable "manage_instance_metadata_defaults" {
+  description = "Set the account IMDS defaults here. Leave false while the Workloads OU EC2 declarative policy is attached; it owns these defaults (ManagedBy = declarative-policy)."
+  type        = bool
+  default     = false
+}

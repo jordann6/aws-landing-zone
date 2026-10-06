@@ -1,7 +1,7 @@
 {
   "ec2_attributes": {
     "exception_message": {
-      "@@assign": "Sandbox compute baseline policy denied this request. Contact the platform owner for reviewed recovery."
+      "@@assign": "${ou_label} compute baseline policy denied this request. Contact the platform owner for reviewed recovery."
     },
     "serial_console_access": {
       "status": {
@@ -37,7 +37,7 @@
     },
     "allowed_images_settings": {
       "state": {
-        "@@assign": "enabled"
+        "@@assign": "${allowed_images_state}"
       },
       "image_criteria": {
         "criteria_1": {
@@ -47,9 +47,7 @@
             ]
           },
           "image_names": {
-            "@@assign": [
-              "al2023-ami-*-x86_64"
-            ]
+            "@@assign": ${amazon_image_names}
           }
         }%{ if golden_ami_owner_account_id != null },
         "criteria_2": {

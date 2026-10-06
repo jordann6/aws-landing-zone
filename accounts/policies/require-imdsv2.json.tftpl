@@ -10,10 +10,7 @@
       "Resource": "arn:aws:ec2:*:*:instance/*",
       "Condition": {
         "ArnNotLike": {
-          "aws:PrincipalArn": [
-            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_break-glass_*",
-            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_break-glass_*"
-          ]
+          "aws:PrincipalArn": ${break_glass_principal_arns}
         },
         "StringNotEquals": {
           "ec2:MetadataHttpTokens": "required"
@@ -29,10 +26,7 @@
       "Resource": "arn:aws:ec2:*:*:instance/*",
       "Condition": {
         "ArnNotLike": {
-          "aws:PrincipalArn": [
-            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_break-glass_*",
-            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_break-glass_*"
-          ]
+          "aws:PrincipalArn": ${break_glass_principal_arns}
         },
         "StringEquals": {
           "ec2:MetadataHttpTokens": "optional"

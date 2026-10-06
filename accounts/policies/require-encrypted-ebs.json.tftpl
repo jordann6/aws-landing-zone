@@ -11,10 +11,7 @@
       "Resource": "arn:aws:ec2:*:*:volume/*",
       "Condition": {
         "ArnNotLike": {
-          "aws:PrincipalArn": [
-            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_break-glass_*",
-            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_break-glass_*"
-          ]
+          "aws:PrincipalArn": ${break_glass_principal_arns}
         },
         "Bool": {
           "ec2:Encrypted": "false"
@@ -30,10 +27,7 @@
       "Resource": "*",
       "Condition": {
         "ArnNotLike": {
-          "aws:PrincipalArn": [
-            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_break-glass_*",
-            "arn:aws:iam::${sandbox_account_id}:role/aws-reserved/sso.amazonaws.com/*/AWSReservedSSO_break-glass_*"
-          ]
+          "aws:PrincipalArn": ${break_glass_principal_arns}
         }
       }
     }
