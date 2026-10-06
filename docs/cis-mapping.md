@@ -75,7 +75,11 @@ view; this table is the design-time intent behind that score.
 | EKS control-plane audit logging | `aws_eks_cluster.prod` `enabled_cluster_log_types` |
 | Image scanning | ECR scan-on-push + Inspector enhanced scanning (`ecr.tf`) |
 | Only private registry pulls | No internet path + hub firewall allowlist; pull-through cache mirrors into ECR |
-| Hardened node image | EC2 Image Builder pipeline (`imagebuilder.tf`) |
+| Hardened standalone image | Image Builder: Amazon STIG + shared `cis_baseline` role, tested after reboot (`imagebuilder.tf`) |
+| IMDSv2 only | SCP `require-imdsv2`, declarative policy `instance_metadata_defaults`, account default + node launch template at hop limit 1 |
+| EBS encrypted by default | SCP `require-encrypted-ebs`, `aws_ebs_encryption_by_default` + CMK (`compute-defaults.tf`) |
+| Only approved images | Declarative policy `allowed_images_settings` (Amazon AL2023 + prod golden AMIs) |
+| OS patching | SSM patch baseline, patch group and scan/install associations (`ssm-patching.tf`) |
 
 ## Preventive controls beyond CIS scoring
 

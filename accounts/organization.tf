@@ -8,11 +8,13 @@ resource "aws_organizations_organization" "org" {
     "access-analyzer.amazonaws.com",
     "ram.amazonaws.com",
     "sso.amazonaws.com",
+    "ec2.amazonaws.com",
   ]
 
   enabled_policy_types = [
     "SERVICE_CONTROL_POLICY",
     "TAG_POLICY",
+    "DECLARATIVE_POLICY_EC2",
   ]
 
   feature_set = "ALL"

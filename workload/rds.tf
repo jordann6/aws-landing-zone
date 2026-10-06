@@ -8,12 +8,14 @@
 # data CMK. That is the sanctioned secrets path from the design.
 
 resource "aws_db_subnet_group" "data" {
+  count      = var.enable_rds ? 1 : 0
   name       = "prod-data"
   subnet_ids = local.data_subnet_ids
   tags       = { Name = "prod-data" }
 }
 
 resource "aws_db_instance" "prod" {
+  count = var.enable_rds ? 1 : 0
   #checkov:skip=CKV_AWS_293:Deletion protection is off by design; the deploy/demo/destroy posture requires teardown.
   #checkov:skip=CKV_AWS_118:Enhanced monitoring adds a role and cost; out of scope for the timed demo.
   #checkov:skip=CKV2_AWS_30:Full query logging is a production parameter-group setting; log exports are enabled below.
@@ -25,17 +27,17 @@ resource "aws_db_instance" "prod" {
   allocated_storage = 20
   storage_type      = "gp3"
   storage_encrypted = true
-  kms_key_id        = aws_kms_key.data.arn
+  kms_key_id        = aws_kms_key.data[0].arn
 
   db_name  = "app"
   username = "appadmin"
 
   # RDS-managed master credential in Secrets Manager, encrypted with the CMK.
   manage_master_user_password   = true
-  master_user_secret_kms_key_id = aws_kms_key.data.key_id
+  master_user_secret_kms_key_id = aws_kms_key.data[0].key_id
 
   multi_az               = true
-  db_subnet_group_name   = aws_db_subnet_group.data.name
+  db_subnet_group_name   = aws_db_subnet_group.data[0].name
   vpc_security_group_ids = [aws_security_group.db.id]
   publicly_accessible    = false
 
@@ -48,7 +50,7 @@ resource "aws_db_instance" "prod" {
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
 
   performance_insights_enabled    = true
-  performance_insights_kms_key_id = aws_kms_key.data.arn
+  performance_insights_kms_key_id = aws_kms_key.data[0].arn
 
   # Belt and braces: an encrypted, private, IAM-auth-capable instance.
   iam_database_authentication_enabled = true

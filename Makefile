@@ -3,6 +3,7 @@ TF_GOV ?= terraform
 TF_NET ?= network
 TF_WORK ?= workload
 TF_OBS ?= observability
+TF_COMP ?= compute
 
 .PHONY: help
 help: ## Show this help
@@ -18,6 +19,7 @@ fmt: ## Terraform format check, all roots
 	terraform -chdir=$(TF_NET) fmt -check -recursive
 	terraform -chdir=$(TF_WORK) fmt -check -recursive
 	terraform -chdir=$(TF_OBS) fmt -check -recursive
+	terraform -chdir=$(TF_COMP) fmt -check -recursive
 
 .PHONY: validate
 validate: ## Terraform validate, all roots
@@ -26,6 +28,7 @@ validate: ## Terraform validate, all roots
 	terraform -chdir=$(TF_NET) init -backend=false && terraform -chdir=$(TF_NET) validate
 	terraform -chdir=$(TF_WORK) init -backend=false && terraform -chdir=$(TF_WORK) validate
 	terraform -chdir=$(TF_OBS) init -backend=false && terraform -chdir=$(TF_OBS) validate
+	terraform -chdir=$(TF_COMP) init -backend=false && terraform -chdir=$(TF_COMP) validate
 
 .PHONY: diagram
 diagram: ## Regenerate docs/architecture.png
@@ -34,7 +37,7 @@ diagram: ## Regenerate docs/architecture.png
 # ---- deploy / test / destroy ----------------------------------------------
 
 .PHONY: deploy
-deploy: ## Deploy accounts, governance, network + workload (hourly), then observability
+deploy: ## Deploy accounts, governance, network + workload (hourly), observability, golden AMI, management instance
 	@echo "==> Accounts root (persistent: org, OUs, member accounts, SCPs). Never destroyed."
 	terraform -chdir=$(TF_ACCT) init
 	terraform -chdir=$(TF_ACCT) apply
@@ -52,16 +55,20 @@ deploy: ## Deploy accounts, governance, network + workload (hourly), then observ
 	   -var network_account_id=$$NET_ID \
 	   -var org_arn=$$ORG_ARN
 	@echo ""
-	@echo "==> Workload root: prod VPC, RDS Multi-AZ, and EKS (hourly). Torn down by 'make destroy'."
+	@echo "==> Workload root: prod VPC, RDS Multi-AZ, EKS (hourly), EC2 defaults, golden image pipeline."
 	@PROD_ID=$$(terraform -chdir=$(TF_ACCT) output -raw prod_account_id); \
 	 NET_ID=$$(terraform -chdir=$(TF_ACCT) output -raw network_account_id); \
+	 ORG_ARN=$$(terraform -chdir=$(TF_ACCT) output -raw organization_arn); \
 	 TGW_ID=$$(terraform -chdir=$(TF_NET) output -raw transit_gateway_id); \
 	 terraform -chdir=$(TF_WORK) init; \
 	 terraform -chdir=$(TF_WORK) apply \
 	   -var prod_account_id=$$PROD_ID \
 	   -var network_account_id=$$NET_ID \
-	   -var transit_gateway_id=$$TGW_ID
+	   -var transit_gateway_id=$$TGW_ID \
+	   -var organization_arn=$$ORG_ARN
 	@$(MAKE) --no-print-directory deploy-observability
+	@$(MAKE) --no-print-directory build-image
+	@$(MAKE) --no-print-directory deploy-compute
 
 .PHONY: deploy-observability
 deploy-observability: ## Finding routing, OAM monitoring account, central alarms (~free)
@@ -73,18 +80,45 @@ deploy-observability: ## Finding routing, OAM monitoring account, central alarms
 test-observability: ## Sample GuardDuty finding, cross-account metrics, forced alarm
 	scripts/test-observability.sh
 
+# ---- compute baseline -------------------------------------------------------
+
+.PHONY: stage-role
+stage-role: ## Package cis_baseline at its pinned tag and upload it for the image build
+	scripts/stage-role.sh
+
+.PHONY: build-image
+build-image: ## Bake + test the golden AMI once (~30-45 min, two t3.small)
+	scripts/build-image.sh
+
+.PHONY: deploy-compute
+deploy-compute: ## Hardened management instance from the newest golden AMI (t3.micro)
+	terraform -chdir=$(TF_COMP) init
+	terraform -chdir=$(TF_COMP) apply
+
+.PHONY: test-compute
+test-compute: ## Prove the baseline on the live instance (defaults, posture, guest checks, patching)
+	scripts/test-compute.sh
+
+.PHONY: destroy-compute
+destroy-compute: ## Remove the management instance, then every golden AMI and snapshot
+	-terraform -chdir=$(TF_COMP) destroy
+	scripts/clean-images.sh
+
 .PHONY: test
 test: ## Prove the guardrails actually deny, not just that apply succeeded
 	scripts/validate.sh
 	scripts/test-guardrails.sh
 	scripts/test-data-tier.sh
 	scripts/test-observability.sh
+	scripts/test-compute.sh
 
 .PHONY: destroy
 # The accounts/ root is deliberately absent: member accounts stay ACTIVE across
 # teardowns (prevent_destroy, close_on_deletion = false), so a redeploy reuses
 # them instead of colliding with SUSPENDED ones.
 destroy: ## Tear down everything except the persistent accounts, then verify
+	@echo "==> Destroying the compute root and golden AMIs (before the EBS key goes)"
+	-@$(MAKE) --no-print-directory destroy-compute
 	@echo "==> Destroying the observability root (alarms, OAM, finding routing)"
 	-terraform -chdir=$(TF_OBS) destroy
 	@echo "==> Destroying the workload root first (releases RDS, EKS, endpoints)"

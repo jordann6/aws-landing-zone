@@ -86,20 +86,21 @@ locals {
   # Representative persona-by-account assignments. The full matrix and the CIS
   # control each row satisfies live in docs/access-model.md.
   assignments_all = {
-    "platform-eng:dev"  = { persona = "platform-eng", account = "dev" }
-    "platform-eng:test" = { persona = "platform-eng", account = "test" }
-    "junior-eng:dev"    = { persona = "junior-eng", account = "dev" }
-    "manager:dev"       = { persona = "manager", account = "dev" }
-    "manager:test"      = { persona = "manager", account = "test" }
-    "manager:prod"      = { persona = "manager", account = "prod" }
-    "admin:prod"        = { persona = "admin", account = "prod" }
-    "admin:management"  = { persona = "admin", account = "management" }
-    "finops:management" = { persona = "finops", account = "management" }
-    "security:security" = { persona = "security", account = "security" }
-    "security:dev"      = { persona = "security", account = "dev" }
-    "security:test"     = { persona = "security", account = "test" }
-    "security:prod"     = { persona = "security", account = "prod" }
-    "breakglass:mgmt"   = { persona = "break-glass", account = "management" }
+    "platform-eng:dev"   = { persona = "platform-eng", account = "dev" }
+    "platform-eng:test"  = { persona = "platform-eng", account = "test" }
+    "junior-eng:dev"     = { persona = "junior-eng", account = "dev" }
+    "manager:dev"        = { persona = "manager", account = "dev" }
+    "manager:test"       = { persona = "manager", account = "test" }
+    "manager:prod"       = { persona = "manager", account = "prod" }
+    "admin:prod"         = { persona = "admin", account = "prod" }
+    "admin:management"   = { persona = "admin", account = "management" }
+    "finops:management"  = { persona = "finops", account = "management" }
+    "security:security"  = { persona = "security", account = "security" }
+    "security:dev"       = { persona = "security", account = "dev" }
+    "security:test"      = { persona = "security", account = "test" }
+    "security:prod"      = { persona = "security", account = "prod" }
+    "breakglass:sandbox" = { persona = "break-glass", account = "sandbox" }
+    "breakglass:mgmt"    = { persona = "break-glass", account = "management" }
   }
 
   # Only assign to accounts that exist in this deployment (full_account_set may

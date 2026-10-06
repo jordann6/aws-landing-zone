@@ -8,7 +8,7 @@ The output path is relative to this source file, independent of the working dire
 from pathlib import Path
 
 from diagrams import Cluster, Diagram, Edge
-from diagrams.aws.compute import EKS, EC2ContainerRegistry
+from diagrams.aws.compute import EC2, EKS, EC2ContainerRegistry, EC2ImageBuilder
 from diagrams.aws.database import RDS
 from diagrams.aws.management import (
     Cloudtrail,
@@ -17,6 +17,7 @@ from diagrams.aws.management import (
     Config,
     Organizations,
     OrganizationsAccount,
+    SystemsManager,
 )
 from diagrams.aws.network import Endpoint, InternetGateway, NATGateway, NetworkFirewall, TransitGateway, VPC
 from diagrams.aws.security import Guardduty, IAMPermissions, SingleSignOn
@@ -38,7 +39,7 @@ with Diagram(
     with Cluster("RETAIN | organization, accounts and governance", graph_attr=RETAINED):
         with Cluster("Management account", graph_attr=RETAINED):
             org = Organizations("Organization\n8 ACTIVE members")
-            controls = IAMPermissions("SCPs + tag policy\nRAM org sharing")
+            controls = IAMPermissions("SCPs + tag policy\nEC2 declarative policy\nRAM org sharing")
             identity = SingleSignOn("Identity Center\noptional")
             org >> Edge(label="member policy") >> controls
             org >> Edge(style="dotted") >> identity
@@ -79,10 +80,17 @@ with Diagram(
                 prod >> Edge(style="dotted", label="hosts") >> eks
                 eks >> Edge(label="private AWS APIs") >> endpoints
                 eks >> Edge(style="dotted", label="SG permits TCP 5432") >> rds
+                with Cluster("App subnet | 10.3.20.0/24", graph_attr=TEMPORARY):
+                    mgmt = EC2("Management instance\ngolden AMI / no public IP\nIMDSv2 / no SSH key")
+                mgmt >> Edge(label="Session Manager\n+ patching") >> endpoints
 
             registry = EC2ContainerRegistry("ECR\nimmutable tags / scanning")
             backup = Backup("Local daily backup\nVault Lock grace period")
             registry >> Edge(style="dashed", label="image source") >> eks
+            golden = EC2ImageBuilder("Golden AMI pipeline\nSTIG + cis_baseline\ntested after reboot")
+            patching = SystemsManager("SSM patch baseline\nDefault Host Management")
+            golden >> Edge(style="dashed", label="boots from") >> mgmt
+            patching >> Edge(style="dashed", label="Patch Group = prod") >> mgmt
             rds >> Edge(style="dashed", label="backup selection") >> backup
 
         prod >> Edge(color="#ac6413", label="egress + inspected return", constraint="false") >> tgw

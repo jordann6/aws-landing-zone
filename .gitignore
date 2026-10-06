@@ -28,3 +28,7 @@ migrate_imports.tf
 # scripts/migrate-state-backend.sh temporaries
 backend_override.tf
 .migrate-init.log
+
+# Compute review artifacts and staged role package
+*.tfplan
+.artifacts/

@@ -51,6 +51,7 @@ resource "aws_subnet" "this" {
 # Cross-account TGW attachment: requested from prod, accepted in the network
 # account (auto-accept is off on the TGW by design).
 resource "aws_ec2_transit_gateway_vpc_attachment" "prod" {
+  count              = var.enable_tgw ? 1 : 0
   transit_gateway_id = var.transit_gateway_id
   vpc_id             = aws_vpc.prod.id
   subnet_ids         = local.tgw_subnet_ids
@@ -62,8 +63,9 @@ resource "aws_ec2_transit_gateway_vpc_attachment" "prod" {
 }
 
 resource "aws_ec2_transit_gateway_vpc_attachment_accepter" "prod" {
+  count                                           = var.enable_tgw ? 1 : 0
   provider                                        = aws.network
-  transit_gateway_attachment_id                   = aws_ec2_transit_gateway_vpc_attachment.prod.id
+  transit_gateway_attachment_id                   = aws_ec2_transit_gateway_vpc_attachment.prod[0].id
   transit_gateway_default_route_table_association = false
   transit_gateway_default_route_table_propagation = false
   tags                                            = { Name = "prod-attachment" }
@@ -77,6 +79,7 @@ resource "aws_route_table" "private" {
 }
 
 resource "aws_route" "private_default" {
+  count                  = var.enable_tgw ? 1 : 0
   route_table_id         = aws_route_table.private.id
   destination_cidr_block = "0.0.0.0/0"
   transit_gateway_id     = var.transit_gateway_id
