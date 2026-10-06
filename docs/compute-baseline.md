@@ -10,9 +10,47 @@ reachable only through the cloud's private access path.
 > Policy approved-image deny, GCP `compute.trustedImageProjects`, AWS Allowed AMIs.
 
 **Status:** the Sandbox OU guardrails are live (applied 2026-10-06) and proven by
-`scripts/test-guardrails.sh` sections 5 to 9, 11/11 passing. The workload
-defaults, golden AMI, patching and management instance are code-complete and not
-yet applied.
+`scripts/test-guardrails.sh` sections 5 to 9, 11/11 passing. The rest of the layer
+was deployed, proven and destroyed in one session on 2026-10-06, with the full
+EKS and RDS workload up alongside it:
+
+| Proof | Result |
+|---|---|
+| `scripts/test-data-tier.sh` | 5/5 |
+| Golden AMI test phase (fresh instance, after reboot) | `HARDENING_OK`, 26 PASS, fail2ban SKIP |
+| `scripts/test-compute.sh` | 17/17 |
+| `scripts/verify-teardown.sh` | clean, KMS-only footprint |
+
+Session cost was about $3 to $3.50 (about 2.5 hours at roughly $1.15/hr).
+
+### What the first live bake changed
+
+None of these were visible to the static gates; each surfaced on the first apply
+or bake and is fixed in code.
+
+- `stig-build-linux-medium` is deprecated and cannot go into new recipes. The
+  recipe uses the unified `stig-build-linux` component with `Level = Medium`.
+- Image Builder lifecycle `DEPRECATE` accepts only an `AGE` filter. Both rules use
+  `AGE` with `retain_at_least`.
+- The build instance fetches components through the Image Builder API, so the
+  prod VPC has an `imagebuilder` interface endpoint.
+- The org `require-s3-encryption` SCP denies a `PutObject` with no SSE header, so
+  `stage-role.sh` sends `--sse AES256`.
+- STIG and the role collide twice, and STIG won both at boot. STIG's
+  `/etc/sysctl.d/99-sysctl.conf` sorts after the role's `99-hardening.conf`
+  (`kptr_restrict` 1 instead of 2), and STIG re-adds audit rules the role already
+  loads, so the kernel rejects the duplicate (`Rule exists`) and `augenrules`
+  stops before the trailing `-e 2`. STIG's own reload discards that error. A
+  `reconcile-stig` build step drops the role's sysctl keys from STIG's files and
+  removes each STIG audit rule the kernel rejects until the merged rules load
+  cleanly; a rejected rule that is not STIG's fails the build. A
+  `boot-diagnostics` test step logs the boot-time audit and sysctl state to the
+  `/aws/imagebuilder/lz-hardened-al2023` log group, which is how this was found
+  after Image Builder terminated the failed test instance.
+- A bake that fails its test phase leaves an untagged AMI. `clean-images.sh` and
+  `verify-teardown.sh` match the pipeline's AMI name as well as the tag.
+- Component and recipe versions are immutable: major.minor follow the role and the
+  patch is the role patch times 100 plus a wrapper revision (`2.0.103`).
 
 ## 1. Preventive guardrails (accounts root, Sandbox OU first)
 
@@ -72,8 +110,9 @@ AL2023 (SSM public parameter)
   it to a private SSE-S3 bucket that the build role reads through the S3 gateway
   endpoint. The build has no internet path, and AL2023 package repos are also
   S3-backed.
-- STIG runs first, then the role, so the role's settings win any overlap. These
-  are the settings the shared test checks on all three clouds.
+- STIG runs first, then the role, then `reconcile-stig`, so the role's settings
+  win any overlap, at boot as well as at build time. These are the settings the
+  shared test checks on all three clouds.
 - fail2ban is gated to Debian in the role, since AL2023 does not package it.
   `check-hardening.sh` reports it as SKIP on AL2023.
 - The build and test instances run in a private app subnet. They have IMDSv2 at

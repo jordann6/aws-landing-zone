@@ -1,12 +1,13 @@
 # AWS Landing Zone
 
-**Compute baseline status:** code and static gates complete on the
-`compute-baseline` branch; not yet applied. Sandbox-first IMDSv2 and EBS
-encryption SCPs, an EC2 declarative policy (Allowed AMIs), prod EC2 defaults, a
-hardened EKS launch template, a golden AMI pipeline baking the shared
-`cis_baseline` role, SSM patching, and a private management instance
-(`compute/`). The live sandbox denial proofs and the management-instance guest
-proof are written but not yet run. See [docs/compute-baseline.md](docs/compute-baseline.md).
+**Compute baseline status:** deployed, proven and destroyed on 2026-10-06. The
+Sandbox OU guardrails are live (`scripts/test-guardrails.sh` 11/11). In one
+session the prod defaults, the golden AMI pipeline, SSM patching and the private
+management instance were applied alongside the full EKS and RDS workload, then
+torn down: `test-data-tier.sh` 5/5, golden AMI test phase `HARDENING_OK` after a
+reboot, `scripts/test-compute.sh` 17/17, `scripts/verify-teardown.sh` clean. See
+[docs/compute-baseline.md](docs/compute-baseline.md) for the run and the fixes
+the first live bake forced.
 Existing verification below covers the earlier EKS/RDS and network demo.
 
 The public repository is
