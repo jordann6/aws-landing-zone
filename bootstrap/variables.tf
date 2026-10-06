@@ -13,7 +13,7 @@ variable "github_org" {
 variable "github_repo" {
   description = "Repository allowed to assume the CI roles"
   type        = string
-  default     = "aws-scp-governance"
+  default     = "aws-landing-zone"
 }
 
 variable "state_bucket" {
@@ -23,7 +23,7 @@ variable "state_bucket" {
 }
 
 variable "state_key_prefix" {
-  description = "Key prefix within the state bucket this repo owns"
+  description = "Key prefix within the state bucket this repo owns. Keeps the pre-rename name (aws-scp-governance) because the live state objects live under it."
   type        = string
   default     = "aws-scp-governance"
 }

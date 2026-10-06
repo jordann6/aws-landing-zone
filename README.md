@@ -131,11 +131,11 @@ The operator reviews and runs applies and destroys. For future demos, the privat
 input exporter reads existing account and network state:
 
 ```bash
-python3 /Users/jordannelson/aws-scp-governance-phaseC/scripts/prepare-workload-inputs.py --workload
-terraform -chdir=/Users/jordannelson/aws-scp-governance-phaseC/workload fmt -check
-terraform -chdir=/Users/jordannelson/aws-scp-governance-phaseC/workload validate
-terraform -chdir=/Users/jordannelson/aws-scp-governance-phaseC/workload plan -var-file=phase-c.tfvars.json -out=tfplan -input=false
-terraform -chdir=/Users/jordannelson/aws-scp-governance-phaseC/workload show tfplan
+python3 scripts/prepare-workload-inputs.py --workload
+terraform -chdir=workload fmt -check
+terraform -chdir=workload validate
+terraform -chdir=workload plan -var-file=phase-c.tfvars.json -out=tfplan -input=false
+terraform -chdir=workload show tfplan
 ```
 
 The exporter requires the deployed network. Generated inputs, state and saved

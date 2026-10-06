@@ -10,7 +10,7 @@ TARGET CLOUD: AWS
 (For the Azure build, change the line above to "TARGET CLOUD: Azure"; for GCP, "TARGET CLOUD: GCP". Build only the target cloud in this chat, using the matching PER-CLOUD block below.)
 
 FIRST STEP: Read the canonical design reference at
-/Users/jordannelson/aws-scp-governance/docs/multicloud-networking-design.md
+/Users/jordannelson/aws-landing-zone/docs/multicloud-networking-design.md
 It is the single source of truth. If anything here conflicts with it, the doc wins. If the file is missing, use the summary below.
 
 STRATEGY SUMMARY (all three zones follow the same shape):
