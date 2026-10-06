@@ -1,7 +1,8 @@
 # AWS Landing Zone
 
 **Compute baseline status:** deployed, proven and destroyed on 2026-10-06. The
-Sandbox OU guardrails are live (`scripts/test-guardrails.sh` 11/11). In one
+compute guardrails are live on the Sandbox and Workloads OUs
+(`scripts/test-guardrails.sh` 20/20, dry-run denials in sandbox and prod). In one
 session the prod defaults, the golden AMI pipeline, SSM patching and the private
 management instance were applied alongside the full EKS and RDS workload, then
 torn down: `test-data-tier.sh` 5/5, golden AMI test phase `HARDENING_OK` after a

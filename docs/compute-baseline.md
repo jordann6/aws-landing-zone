@@ -9,8 +9,10 @@ reachable only through the cloud's private access path.
 > One hardening role, three image pipelines, three enforcement points: Azure
 > Policy approved-image deny, GCP `compute.trustedImageProjects`, AWS Allowed AMIs.
 
-**Status:** the Sandbox OU guardrails are live (applied 2026-10-06) and proven by
-`scripts/test-guardrails.sh` sections 5 to 9, 11/11 passing. The rest of the layer
+**Status:** the guardrails are live on the Sandbox OU and, since the reviewed
+promotion on 2026-10-06, the Workloads OU (Dev, Test, Prod). `scripts/test-guardrails.sh`
+proves them with dry runs in sandbox (sections 5 to 9) and prod (10 to 15), 20/20
+passing. The rest of the layer
 was deployed, proven and destroyed in one session on 2026-10-06, with the full
 EKS and RDS workload up alongside it:
 
@@ -52,20 +54,43 @@ or bake and is fixed in code.
 - Component and recipe versions are immutable: major.minor follow the role and the
   patch is the role patch times 100 plus a wrapper revision (`2.0.103`).
 
-## 1. Preventive guardrails (accounts root, Sandbox OU first)
+## 1. Preventive guardrails (accounts root, Sandbox and Workloads OUs)
 
 | Control | Implementation | Proof (`scripts/test-guardrails.sh`, free `--dry-run`) |
 |---|---|---|
 | IMDSv2 required at launch, no downgrade | SCP `require-imdsv2` | `run-instances --metadata-options HttpTokens=optional` is denied. Live, the declarative policy's `httpTokensEnforced` rejects it first (`UnsupportedOperation`), so the SCP is the second layer |
 | No unencrypted EBS; default encryption cannot be disabled | SCP `require-encrypted-ebs` | `create-volume --no-encrypted` is denied by an explicit SCP deny |
-| Allowed AMIs: Amazon AL2023 plus golden AMIs owned by prod | Declarative policy `sandbox-ec2-baseline` (`allowed_images_settings`) | Canonical Ubuntu AMI is hidden: it is `available` from the management account but `InvalidAMIID.NotFound` in sandbox. Compliant AL2023 launch reaches `DryRunOperation` |
-| IMDS defaults enforced (IMDSv2 required, hop limit 1), serial console off, AMI and snapshot public sharing blocked | Same declarative policy | `get-allowed-images-settings`, `get-instance-metadata-defaults` (tokens `required`, hop limit `1`) in sandbox |
+| Allowed AMIs: Amazon AL2023 plus golden AMIs owned by prod; Workloads also allows the EKS-optimized AL2023 node images | Declarative policies `sandbox-ec2-baseline` and `workloads-ec2-baseline` (`allowed_images_settings`), one template | Canonical Ubuntu AMI is hidden: it is `available` from the management account but `InvalidAMIID.NotFound` in sandbox and prod. Compliant AL2023 launch reaches `DryRunOperation`. The EKS node AMI reports `ImageAllowed=True` in prod |
+| IMDS defaults enforced (IMDSv2 required, hop limit 1), serial console off, AMI and snapshot public sharing blocked | Same declarative policies | `get-allowed-images-settings`, `get-instance-metadata-defaults` (tokens `required`, hop limit `1`) in sandbox and prod |
 
-Both SCPs exempt only the sandbox account's Identity Center break-glass role
-(`breakglass:sandbox` assignment in the governance root). The rollout attaches to
-the Sandbox OU only. Promotion to the Workloads OU is a separate reviewed change
-after the sandbox proof passes. The golden AMI owner is already in the Allowed
-AMIs criteria, so promotion will not block it.
+Both SCPs exempt only the Identity Center break-glass role in the accounts under
+the two OUs (sandbox, dev, test, prod). The exemption is inert until the
+governance root assigns the break-glass persona in that account; today only
+`breakglass:sandbox` exists, so no principal in dev, test or prod is exempt.
+
+### Workloads OU promotion (2026-10-06)
+
+The sandbox criteria would have broken the prod node group. The EKS-optimized
+AL2023 AMI is Amazon-owned (provider `amazon`), but its name,
+`amazon-eks-node-al2023-x86_64-standard-<version>-<date>`, does not match
+`al2023-ami-*-x86_64`, and in sandbox `describe-images` hides it. The Workloads
+policy adds that name pattern, unpinned so a cluster upgrade keeps working.
+
+The rollout ran in two reviewed applies. The first attached both SCPs and
+`workloads-ec2-baseline` with Allowed AMIs in `audit_mode`; prod then reported
+`ImageAllowed=True` for the EKS 1.35 node AMI and the AL2023 parent, and `False`
+for a Canonical Ubuntu control. The second switched Allowed AMIs to `enabled`.
+The sandbox policy moved to `ec2_baseline["sandbox"]` through `moved` blocks
+with identical content, so its live attachment was never recreated.
+
+Every EC2 path in the workload and compute roots was checked against the new
+denials. EKS nodes and the Image Builder build and test instances launch through
+service-linked roles, which SCPs do not apply to; their launch template and
+infrastructure configuration already set IMDSv2 at hop 1 and encrypted gp3, and
+their images match the criteria. The management instance is compliant. No EBS
+CSI driver is installed, so nothing creates unencrypted volumes. RDS is not
+affected. The golden AMI criterion is the same one sandbox enforces; the next
+bake confirms it in prod.
 
 Declarative policies apply to the account's EC2 service attributes, not to IAM.
 They hold even against a principal that an SCP would exempt. That is why the
@@ -87,7 +112,10 @@ policy through a reviewed accounts plan.
   AWS-managed `aws/ebs` key (any principal in the account, only through EC2). This
   covers the Auto Scaling and Image Builder service-linked roles without naming
   them, so it does not fail in an account where they do not exist yet.
-- `aws_ec2_instance_metadata_defaults`: IMDSv2 required, hop limit 1.
+- IMDSv2 required at hop limit 1 as the account default. The Workloads OU
+  declarative policy owns this attribute (`ManagedBy = declarative-policy`), so
+  `aws_ec2_instance_metadata_defaults` is off unless
+  `manage_instance_metadata_defaults = true`.
 - EKS node group launch template (`eks.tf`): IMDSv2 at hop limit 1 and a
   KMS-encrypted gp3 root. Nodes stay on the EKS-optimized AL2023 image, which EKS
   versions and patches with the control plane. The golden AMI is for standalone

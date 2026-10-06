@@ -76,9 +76,9 @@ view; this table is the design-time intent behind that score.
 | Image scanning | ECR scan-on-push + Inspector enhanced scanning (`ecr.tf`) |
 | Only private registry pulls | No internet path + hub firewall allowlist; pull-through cache mirrors into ECR |
 | Hardened standalone image | Image Builder: Amazon STIG + shared `cis_baseline` role, tested after reboot (`imagebuilder.tf`) |
-| IMDSv2 only | SCP `require-imdsv2`, declarative policy `instance_metadata_defaults`, account default + node launch template at hop limit 1 |
+| IMDSv2 only | SCP `require-imdsv2`, declarative policy `instance_metadata_defaults` (owns the account default), node launch template and instances at hop limit 1 |
 | EBS encrypted by default | SCP `require-encrypted-ebs`, `aws_ebs_encryption_by_default` + CMK (`compute-defaults.tf`) |
-| Only approved images | Declarative policy `allowed_images_settings` (Amazon AL2023 + prod golden AMIs) |
+| Only approved images | Declarative policy `allowed_images_settings` (Amazon AL2023 + prod golden AMIs; Workloads adds the EKS-optimized AL2023 node images) |
 | OS patching | SSM patch baseline, patch group and scan/install associations (`ssm-patching.tf`) |
 
 ## Preventive controls beyond CIS scoring

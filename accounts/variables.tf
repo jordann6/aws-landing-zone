@@ -38,3 +38,14 @@ variable "enable_tag_policy" {
   type        = bool
   default     = true
 }
+
+variable "workloads_allowed_images_state" {
+  description = "Allowed AMIs mode for the Workloads OU declarative policy. audit_mode reports ImageAllowed without blocking (the rollout ran it first and proved the EKS node and AL2023 images allowed in prod)."
+  type        = string
+  default     = "enabled"
+
+  validation {
+    condition     = contains(["audit_mode", "enabled"], var.workloads_allowed_images_state)
+    error_message = "workloads_allowed_images_state must be audit_mode or enabled."
+  }
+}

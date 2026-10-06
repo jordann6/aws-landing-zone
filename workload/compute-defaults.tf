@@ -111,8 +111,12 @@ resource "aws_ebs_default_kms_key" "this" {
 }
 
 # Hop limit 1: a container on a node cannot reach IMDS through the extra network
-# hop, so it cannot read the node role. Pods use IRSA instead.
+# hop, so it cannot read the node role. Pods use IRSA instead. The Workloads OU
+# declarative policy (accounts/compute-baseline.tf) sets the same defaults and
+# owns the attribute once attached, so this account-level copy is off by default.
 resource "aws_ec2_instance_metadata_defaults" "this" {
+  count = var.manage_instance_metadata_defaults ? 1 : 0
+
   http_tokens                 = "required"
   http_put_response_hop_limit = 1
   http_endpoint               = "enabled"
