@@ -12,13 +12,18 @@ source "$(dirname "$0")/lib-assume.sh"
 "$ROOT/scripts/stage-role.sh"
 
 PIPELINE="$(workload_output golden_image_pipeline_arn)"
-assume "$(account_output prod_account_id)" build-image
-IMAGE="$(aws imagebuilder start-image-pipeline-execution --pipeline-arn "$PIPELINE" \
+PROD_ID="$(account_output prod_account_id)"
+assume "$PROD_ID" build-image
+IMAGE="$(aws imagebuilder start-image-pipeline-execution --image-pipeline-arn "$PIPELINE" \
   --query imageBuildVersionArn --output text)"
 echo "Started $IMAGE"
 
 deadline=$((SECONDS + 5400))
 while :; do
+  # Re-assume each poll from the base identity: a role session lasts at most an
+  # hour, shorter than a slow bake.
+  clear_creds
+  assume "$PROD_ID" build-image
   STATUS="$(aws imagebuilder get-image --image-build-version-arn "$IMAGE" --query image.state.status --output text)"
   echo "  $(date +%H:%M:%S) $STATUS"
   case "$STATUS" in

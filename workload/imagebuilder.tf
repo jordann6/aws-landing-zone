@@ -16,9 +16,66 @@ data "aws_ssm_parameter" "al2023" {
 
 locals {
   golden_image_name = "lz-hardened-al2023"
-  # Image Builder versions are immutable; the component version tracks the role.
-  cis_component_version = trimprefix(var.cis_baseline_release, "v")
+  # Image Builder versions are immutable. major.minor follow the role; the patch
+  # is the role patch x 100 plus this wrapper's revision (role 2.0.1, rev 1 =
+  # 2.0.101). Bump component_revision whenever the component document changes.
+  component_revision    = 3
+  role_semver           = split(".", trimprefix(var.cis_baseline_release, "v"))
+  cis_component_version = format("%s.%s.%d", local.role_semver[0], local.role_semver[1], tonumber(local.role_semver[2]) * 100 + local.component_revision)
   role_prefix           = "cis-baseline/${var.cis_baseline_release}"
+
+  # Runs after the role. STIG and the role overlap in two places, and in both
+  # the role must win (it carries the settings the cross-cloud test checks).
+  reconcile_stig = <<-EOT
+    set -euo pipefail
+    # 1. sysctl: STIG writes /etc/sysctl.d/99-sysctl.conf, which sorts after the
+    #    role's 99-hardening.conf and so wins at boot. Drop every key the role
+    #    sets from STIG's files.
+    for f in /etc/sysctl.d/99-sysctl.conf /etc/sysctl.conf; do
+      [ -f "$f" ] || continue
+      awk -F= '
+        { key = $1; gsub(/[[:space:]]/, "", key) }
+        NR == FNR { if (key ~ /^[a-z]/) role[key] = 1; next }
+        key in role { print "role overrides STIG in " FILENAME ": " $0 > "/dev/stderr"; next }
+        { print }' /etc/sysctl.d/99-hardening.conf "$f" > /tmp/lz-sysctl
+      cat /tmp/lz-sysctl > "$f" # cat keeps the symlink and the file mode
+    done
+    rm -f /tmp/lz-sysctl
+    sysctl --system > /dev/null
+    # 2. audit: augenrules always emits -e 2 last, so one rule the kernel rejects
+    #    (STIG re-adds rules the role already loads: "Rule exists") stops the
+    #    load before the rules go immutable, and STIG's own reload discards that
+    #    error. Load the merged rules without -e; on each rejected line, drop it
+    #    from STIG's file (the role's copy stays) and retry until clean.
+    for attempt in $(seq 1 25); do
+      augenrules > /dev/null
+      grep -v '^-e' /etc/audit/audit.rules > /tmp/lz-audit.rules
+      auditctl -D > /dev/null
+      if err="$(auditctl -R /tmp/lz-audit.rules 2>&1 > /dev/null)"; then break; fi
+      n="$(echo "$err" | sed -n 's/.*error in line \([0-9][0-9]*\).*/\1/p' | head -1)"
+      rule="$(sed -n "$n"p /tmp/lz-audit.rules)"
+      reason="$(echo "$err" | grep -v 'slower$' | head -1)" # skip auditctl performance warnings
+      if [ -z "$n" ] || ! grep -Fxq -- "$rule" /etc/audit/rules.d/audit.rules || [ "$attempt" -eq 25 ]; then
+        echo "audit rules do not load cleanly and the rejected rule is not STIG's: $reason: $rule"
+        exit 1
+      fi
+      echo "dropping STIG audit rule ($reason): $rule"
+      grep -Fxv -- "$rule" /etc/audit/rules.d/audit.rules > /tmp/lz-stig.rules || true
+      cat /tmp/lz-stig.rules > /etc/audit/rules.d/audit.rules
+    done
+    rm -f /tmp/lz-audit.rules /tmp/lz-stig.rules
+    augenrules --load
+    auditctl -s
+  EOT
+
+  # Never fails: puts the boot-time audit and sysctl state in the build log, so
+  # a test failure can be diagnosed after Image Builder terminates the instance.
+  boot_diagnostics = <<-EOT
+    echo "--- auditctl -s"; auditctl -s || true
+    echo "--- audit load errors this boot"
+    journalctl -b --no-pager -u auditd -u audit-rules 2>&1 | grep -i -E 'error|fail|line' || echo none
+    echo "--- sysctl"; sysctl kernel.kptr_restrict || true
+  EOT
 }
 
 # --- staged role artifacts ---------------------------------------------------
@@ -176,6 +233,10 @@ resource "aws_imagebuilder_component" "cis_baseline" {
   platform    = "Linux"
   version     = local.cis_component_version
 
+  lifecycle {
+    create_before_destroy = true # the recipe in use must exist until the new one does
+  }
+
   data = yamlencode({
     schemaVersion = 1.0
     phases = [
@@ -211,17 +272,29 @@ resource "aws_imagebuilder_component" "cis_baseline" {
               ]
             }
           },
+          {
+            name   = "reconcile-stig"
+            action = "ExecuteBash"
+            inputs = { commands = [local.reconcile_stig] }
+          },
         ]
       },
       {
         # Runs on a fresh instance booted from the new AMI, after a reboot, so
         # immutable audit rules and persisted sysctls are checked as they boot.
         name = "test"
-        steps = [{
-          name   = "check-hardening"
-          action = "ExecuteBash"
-          inputs = { commands = ["/usr/local/sbin/check-hardening.sh"] }
-        }]
+        steps = [
+          {
+            name   = "boot-diagnostics"
+            action = "ExecuteBash"
+            inputs = { commands = [local.boot_diagnostics] }
+          },
+          {
+            name   = "check-hardening"
+            action = "ExecuteBash"
+            inputs = { commands = ["/usr/local/sbin/check-hardening.sh"] }
+          },
+        ]
       },
     ]
   })
@@ -233,10 +306,21 @@ resource "aws_imagebuilder_image_recipe" "hardened" {
   version      = local.cis_component_version
   description  = "AL2023 + Amazon STIG ${var.stig_component_level} + cis_baseline ${var.cis_baseline_release}"
 
+  lifecycle {
+    create_before_destroy = true # the pipeline points at it until the new version exists
+  }
+
   # STIG first, then the shared role, so the role's settings (the ones the test
   # phase checks, identically on all three clouds) win any overlap.
+  # The per-level components (stig-build-linux-medium) are deprecated and cannot
+  # go into new recipes; the unified component takes the level as a parameter.
   component {
-    component_arn = "arn:aws:imagebuilder:${var.region}:aws:component/stig-build-linux-${var.stig_component_level}/x.x.x"
+    component_arn = "arn:aws:imagebuilder:${var.region}:aws:component/stig-build-linux/x.x.x"
+
+    parameter {
+      name  = "Level"
+      value = title(var.stig_component_level)
+    }
   }
 
   component {
@@ -344,17 +428,21 @@ resource "aws_iam_role_policy_attachment" "imagebuilder_lifecycle" {
 
 resource "aws_imagebuilder_lifecycle_policy" "hardened" {
   name           = local.golden_image_name
-  description    = "Deprecate all but the newest golden AMI; delete beyond three"
+  description    = "Deprecate golden AMIs after 7 days and delete after 30, always keeping the newest"
   execution_role = aws_iam_role.imagebuilder_lifecycle.arn
   resource_type  = "AMI_IMAGE"
 
+  # DEPRECATE accepts only an AGE filter, so both rules age out and
+  # retain_at_least keeps the newest image usable (and three on disk).
   policy_detail {
     action {
       type = "DEPRECATE"
     }
     filter {
-      type  = "COUNT"
-      value = 1
+      type            = "AGE"
+      value           = 7
+      unit            = "DAYS"
+      retain_at_least = 1
     }
   }
 
@@ -367,8 +455,10 @@ resource "aws_imagebuilder_lifecycle_policy" "hardened" {
       }
     }
     filter {
-      type  = "COUNT"
-      value = 3
+      type            = "AGE"
+      value           = 30
+      unit            = "DAYS"
+      retain_at_least = 3
     }
   }
 

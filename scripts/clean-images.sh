@@ -17,8 +17,13 @@ for arn in $(aws imagebuilder list-images --owner Self --query 'imageVersionList
   done
 done
 
-for ami in $(aws ec2 describe-images --owners self --filters Name=tag:GoldenImage,Values=true \
-    --query 'Images[].ImageId' --output text); do
+# Match on the name as well as the tag: a bake that fails its test phase leaves
+# an AMI from the build instance, untagged because tags are applied only at
+# distribution.
+for ami in $( (aws ec2 describe-images --owners self --filters Name=tag:GoldenImage,Values=true \
+      --query 'Images[].ImageId' --output text
+    aws ec2 describe-images --owners self --filters 'Name=name,Values=lz-hardened-al2023-*' \
+      --query 'Images[].ImageId' --output text) | tr '\t' '\n' | sort -u); do
   snaps="$(aws ec2 describe-images --image-ids "$ami" \
     --query 'Images[0].BlockDeviceMappings[].Ebs.SnapshotId' --output text)"
   aws ec2 deregister-image --image-id "$ami" && echo "deregistered $ami"

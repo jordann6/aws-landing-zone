@@ -31,7 +31,9 @@ tar -czf "$STAGE/bundle.tar.gz" -C "$STAGE" bundle
 SHA="$(shasum -a 256 "$STAGE/bundle.tar.gz" | cut -d' ' -f1)"
 
 assume "$(account_output prod_account_id)" stage-role
+# The org require-s3-encryption SCP denies a PutObject without an explicit SSE
+# header, whatever the bucket default; AES256 matches the bucket's SSE-S3.
 aws s3 cp "$STAGE/bundle.tar.gz" "s3://$BUCKET/cis-baseline/$RELEASE/bundle.tar.gz" \
-  --metadata "sha256=$SHA,source-tag=$RELEASE" --only-show-errors
+  --sse AES256 --metadata "sha256=$SHA,source-tag=$RELEASE" --only-show-errors
 clear_creds
 echo "Staged cis_baseline $RELEASE (sha256 $SHA) to s3://$BUCKET/cis-baseline/$RELEASE/"
