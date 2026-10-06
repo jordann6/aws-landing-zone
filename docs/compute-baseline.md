@@ -59,11 +59,11 @@ policy through a reviewed accounts plan.
 
 ```
 AL2023 (SSM public parameter)
-  -> Amazon STIG component (stig-build-linux-medium, x.x.x)
+  -> Amazon STIG component (stig-build-linux, x.x.x, Level=Medium)
   -> cis-baseline component: dnf upgrade, cis_baseline role from S3, offline
   -> test phase on a NEW instance booted from the AMI: check-hardening.sh
   -> distribution: KMS-encrypted AMI, tagged, optionally shared to the org
-  -> Inspector scan; lifecycle policy deprecates all but the newest, deletes beyond 3
+  -> Inspector scan; lifecycle policy deprecates after 7 days and deletes after 30, keeping the newest
 ```
 
 - The role is the same `cis_baseline` role from `azure-vm-hardening`, at the

@@ -17,6 +17,7 @@ locals {
     "ssmmessages",
     "ec2messages",
     "secretsmanager",
+    "imagebuilder", # AWSTOE on the golden image build instance fetches components via this API
   ]
 }
 

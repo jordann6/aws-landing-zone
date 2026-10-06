@@ -51,6 +51,11 @@ resource "aws_ecr_pull_through_cache_rule" "public" {
 resource "aws_inspector2_enabler" "this" {
   account_ids    = [data.aws_caller_identity.current.account_id]
   resource_types = ["ECR", "EC2"]
+
+  # Disabling scans can outlast the provider's 5 minute default on teardown.
+  timeouts {
+    delete = "15m"
+  }
 }
 
 resource "aws_ecr_registry_scanning_configuration" "this" {

@@ -43,6 +43,7 @@ fi
 
 # Golden AMIs are created by the Image Builder pipeline, not by Terraform, so they
 # never show up in state. make destroy runs clean-images; this proves it worked.
+# Matched by name: a bake that fails its test phase leaves an untagged AMI.
 echo "==> golden AMIs and snapshots (prod account)"
 prod_id="$(terraform -chdir="$ROOT/accounts" output -raw prod_account_id 2>/dev/null || true)"
 if [[ -z "$prod_id" ]] || ! creds="$(aws sts assume-role --role-arn "arn:aws:iam::${prod_id}:role/OrganizationAccountAccessRole" \
@@ -52,7 +53,7 @@ else
   images="$(AWS_ACCESS_KEY_ID="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["AccessKeyId"])')" \
     AWS_SECRET_ACCESS_KEY="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SecretAccessKey"])')" \
     AWS_SESSION_TOKEN="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SessionToken"])')" \
-    aws ec2 describe-images --owners self --region us-east-1 --filters Name=tag:GoldenImage,Values=true \
+    aws ec2 describe-images --owners self --region us-east-1 --filters 'Name=name,Values=lz-hardened-al2023-*' \
     --query 'Images[].ImageId' --output text)"
   if [[ -n "$images" ]]; then
     echo "  golden AMIs still registered (snapshots bill monthly): $images"
