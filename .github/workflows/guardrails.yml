@@ -64,6 +64,12 @@ jobs:
     with:
       terraform_dir: compute
 
+  # The secrets/ root: metadata-only scan-target roles for the secrets scanner.
+  static_secrets:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.4.0
+    with:
+      terraform_dir: secrets
+
   # The FinOps allocation policy (CostCenter) already runs inside `static`, since
   # tf-ci.yml evaluates the whole shared policy/ set. These jobs add the cost
   # *threshold*: a PR that raises a billable root's projected monthly cost by more

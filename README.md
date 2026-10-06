@@ -215,6 +215,7 @@ and destroys are run by the operator using reviewed, saved plans.
 
 - [Completion runbook](docs/completion.md): completed teardown, verification and closeout steps.
 - [Separate security cleanup](docs/security-cleanup.md): retired state-history cleanup without redeploying the gateway.
+- [Secrets lifecycle](docs/secrets-lifecycle.md): metadata-only scanner roles in every member account, ninety-day credential alarms and the live proof.
 - [Compute baseline](docs/compute-baseline.md): guardrails, golden AMI, patching, management instance and their proofs.
 - [CIS mapping](docs/cis-mapping.md): controls mapped to resources and policies, with scope limitations.
 - [Access model](docs/access-model.md): personas, account scope and permissions.
