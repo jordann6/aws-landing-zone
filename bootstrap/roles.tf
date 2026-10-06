@@ -41,8 +41,8 @@ data "aws_iam_policy_document" "state_access" {
     }
   }
 
-  # Transitional legacy grant (SSE-S3 there, so no KMS). Dropped by setting
-  # legacy_state_bucket = "".
+  # Legacy grant, off by default (SSE-S3 there, so no KMS). Only rendered when
+  # legacy_state_bucket is set for a rollback.
   dynamic "statement" {
     for_each = local.legacy_states
     content {
