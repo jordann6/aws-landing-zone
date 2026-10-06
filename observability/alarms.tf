@@ -1,9 +1,9 @@
 # Central alarms, all in the monitoring account, each reading a metric that lives
 # in a source account through the OAM link (metric_query.account_id). They notify
-# the ops topic on ALARM and on OK, so the incident responder (Phase D) can both
+# the ops topic on ALARM and on OK, so the incident responder can both
 # act and confirm recovery.
 #
-# The RDS replica-lag alarm arrives with the cross-region replica in Phase E;
+# The RDS replica-lag alarm arrives with the cross-region replica (warm standby);
 # a Multi-AZ instance does not publish ReplicaLag.
 
 data "aws_iam_policy_document" "ops_key" {
@@ -38,6 +38,25 @@ data "aws_iam_policy_document" "ops_key" {
       values   = ["arn:aws:sns:${var.region}:${local.monitoring_account_id}:ops-alarms"]
     }
   }
+
+  # The incident responder's remediation role (prod) publishes its incident
+  # notices here, so they reach the same inbox as the alarms. Account root plus
+  # a PrincipalArn condition, so the policy is valid before the role exists.
+  statement {
+    sid       = "AllowIncidentResponderPublish"
+    effect    = "Allow"
+    actions   = ["kms:GenerateDataKey*", "kms:Decrypt"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${local.prod_account_id}:root"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.responder_role_arn]
+    }
+  }
 }
 
 resource "aws_kms_key" "ops" {
@@ -58,12 +77,98 @@ resource "aws_kms_alias" "ops" {
   target_key_id = aws_kms_key.ops.key_id
 }
 
-# Default topic policy: same-account CloudWatch alarms may publish.
 resource "aws_sns_topic" "ops" {
   provider = aws.monitoring
 
   name              = "ops-alarms"
   kms_master_key_id = aws_kms_key.ops.arn
+}
+
+locals {
+  # Fixed by the responder's landing zone stack (aws-incident-responder/terraform/lz).
+  responder_role_arn = "arn:aws:iam::${local.prod_account_id}:role/${var.responder_role_name}"
+}
+
+# Replaces the default policy. Owner management and same-account alarms as
+# before, plus the incident responder in prod: its SQS queue may subscribe and
+# its remediation role may publish notices back. The responder's subscription
+# filters on AlarmName in the body, so its own notices never loop back to it.
+data "aws_iam_policy_document" "ops_topic" {
+  statement {
+    sid = "OwnerManage"
+    actions = [
+      "sns:GetTopicAttributes", "sns:SetTopicAttributes", "sns:AddPermission",
+      "sns:RemovePermission", "sns:DeleteTopic", "sns:Subscribe",
+      "sns:ListSubscriptionsByTopic", "sns:Publish",
+    ]
+    resources = [aws_sns_topic.ops.arn]
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceOwner"
+      values   = [local.monitoring_account_id]
+    }
+  }
+
+  statement {
+    sid       = "CloudWatchAlarmsPublish"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.ops.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudwatch.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [local.monitoring_account_id]
+    }
+  }
+
+  statement {
+    sid       = "IncidentResponderQueueSubscribe"
+    actions   = ["sns:Subscribe"]
+    resources = [aws_sns_topic.ops.arn]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${local.prod_account_id}:root"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "sns:Protocol"
+      values   = ["sqs"]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "sns:Endpoint"
+      values   = ["arn:aws:sqs:${var.region}:${local.prod_account_id}:incident-responder-*"]
+    }
+  }
+
+  statement {
+    sid       = "IncidentResponderPublish"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.ops.arn]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${local.prod_account_id}:root"]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:PrincipalArn"
+      values   = [local.responder_role_arn]
+    }
+  }
+}
+
+resource "aws_sns_topic_policy" "ops" {
+  provider = aws.monitoring
+
+  arn    = aws_sns_topic.ops.arn
+  policy = data.aws_iam_policy_document.ops_topic.json
 }
 
 resource "aws_sns_topic_subscription" "ops_email" {

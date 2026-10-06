@@ -5,6 +5,7 @@ TF_WORK ?= workload
 TF_OBS ?= observability
 TF_COMP ?= compute
 TF_SEC ?= secrets
+TF_INC ?= incident
 
 .PHONY: help
 help: ## Show this help
@@ -22,6 +23,7 @@ fmt: ## Terraform format check, all roots
 	terraform -chdir=$(TF_OBS) fmt -check -recursive
 	terraform -chdir=$(TF_COMP) fmt -check -recursive
 	terraform -chdir=$(TF_SEC) fmt -check -recursive
+	terraform -chdir=$(TF_INC) fmt -check -recursive
 
 .PHONY: validate
 validate: ## Terraform validate, all roots
@@ -32,6 +34,7 @@ validate: ## Terraform validate, all roots
 	terraform -chdir=$(TF_OBS) init -backend=false && terraform -chdir=$(TF_OBS) validate
 	terraform -chdir=$(TF_COMP) init -backend=false && terraform -chdir=$(TF_COMP) validate
 	terraform -chdir=$(TF_SEC) init -backend=false && terraform -chdir=$(TF_SEC) validate
+	terraform -chdir=$(TF_INC) init -backend=false && terraform -chdir=$(TF_INC) validate
 
 .PHONY: diagram
 diagram: ## Regenerate docs/architecture.png
@@ -107,6 +110,12 @@ destroy-compute: ## Remove the management instance, then every golden AMI and sn
 	-terraform -chdir=$(TF_COMP) destroy
 	scripts/clean-images.sh
 
+# ---- incident tooling ------------------------------------------------------------
+
+.PHONY: clean-forensics
+clean-forensics: ## Delete the forensics runbook's prod snapshots (after evidence review)
+	scripts/clean-forensics.sh
+
 .PHONY: test
 test: ## Prove the guardrails actually deny, not just that apply succeeded
 	scripts/validate.sh
@@ -120,6 +129,8 @@ test: ## Prove the guardrails actually deny, not just that apply succeeded
 # teardowns (prevent_destroy, close_on_deletion = false), so a redeploy reuses
 # them instead of colliding with SUSPENDED ones.
 destroy: ## Tear down everything except the persistent accounts, then verify
+	@echo "==> Deleting forensics snapshots (not in any state)"
+	-@$(MAKE) --no-print-directory clean-forensics
 	@echo "==> Destroying the compute root and golden AMIs (before the EBS key goes)"
 	-@$(MAKE) --no-print-directory destroy-compute
 	@echo "==> Destroying the observability root (alarms, OAM, finding routing)"

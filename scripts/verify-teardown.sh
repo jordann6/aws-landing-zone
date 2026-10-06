@@ -50,16 +50,31 @@ if [[ -z "$prod_id" ]] || ! creds="$(aws sts assume-role --role-arn "arn:aws:iam
     --role-session-name verify-teardown --query Credentials --output json 2>/dev/null)"; then
   echo "  could not assume into prod. SKIPPED"
 else
-  images="$(AWS_ACCESS_KEY_ID="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["AccessKeyId"])')" \
-    AWS_SECRET_ACCESS_KEY="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SecretAccessKey"])')" \
-    AWS_SESSION_TOKEN="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SessionToken"])')" \
-    aws ec2 describe-images --owners self --region us-east-1 --filters 'Name=name,Values=lz-hardened-al2023-*' \
+  prod_ec2() {
+    AWS_ACCESS_KEY_ID="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["AccessKeyId"])')" \
+      AWS_SECRET_ACCESS_KEY="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SecretAccessKey"])')" \
+      AWS_SESSION_TOKEN="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SessionToken"])')" \
+      aws ec2 --region us-east-1 "$@"
+  }
+  images="$(prod_ec2 describe-images --owners self --filters 'Name=name,Values=lz-hardened-al2023-*' \
     --query 'Images[].ImageId' --output text)"
   if [[ -n "$images" ]]; then
     echo "  golden AMIs still registered (snapshots bill monthly): $images"
     fail=1
   else
     echo "  no golden AMIs remain. OK"
+  fi
+
+  # The forensics runbook snapshots at incident time; scripts/clean-forensics.sh
+  # removes them once the evidence has been reviewed.
+  echo "==> forensics snapshots (prod account)"
+  snaps="$(prod_ec2 describe-snapshots --owner-ids self --filters 'Name=tag-key,Values=forensics:stage' \
+    --query 'Snapshots[].SnapshotId' --output text)"
+  if [[ -n "$snaps" ]]; then
+    echo "  forensics snapshots remain (bill monthly): $snaps"
+    fail=1
+  else
+    echo "  no forensics snapshots remain. OK"
   fi
 fi
 

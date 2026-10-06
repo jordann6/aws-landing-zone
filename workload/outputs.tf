@@ -83,3 +83,16 @@ output "cis_baseline_release" {
 output "prod_cidr" {
   value = var.prod_cidr
 }
+
+output "quarantine_security_group_id" {
+  description = "No-ingress, no-egress group the forensics runbook isolates instances into"
+  value       = aws_security_group.quarantine.id
+}
+
+output "eks_node_group_name" {
+  value = var.enable_eks ? aws_eks_node_group.prod[0].node_group_name : null
+}
+
+output "rds_instance_id" {
+  value = var.enable_rds ? aws_db_instance.prod[0].identifier : null
+}

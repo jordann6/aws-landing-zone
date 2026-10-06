@@ -81,6 +81,14 @@ resource "aws_eks_cluster" "prod" {
     resources = ["secrets"]
   }
 
+  # Access entries (API) alongside the aws-auth ConfigMap. The incident
+  # responder's remediation role gets a namespace-scoped entry, and EKS creates
+  # node group entries itself, so nothing is written to aws-auth by hand.
+  access_config {
+    authentication_mode                         = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin_permissions = true
+  }
+
   # Full control-plane audit logging.
   enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 

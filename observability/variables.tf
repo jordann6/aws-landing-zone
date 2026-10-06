@@ -73,3 +73,17 @@ variable "firewall_dropped_packets_threshold" {
   type        = number
   default     = 100
 }
+
+# --- Incident tooling ---
+
+variable "responder_role_name" {
+  description = "Remediation role the incident responder creates in prod; it may publish incident notices to the ops topic"
+  type        = string
+  default     = "incident-responder-lz-remediate"
+}
+
+variable "enable_forensics_drill" {
+  description = "Create the forensics-drill EventBridge rule (proof sessions only)"
+  type        = bool
+  default     = false
+}
