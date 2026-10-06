@@ -32,3 +32,6 @@ backend_override.tf
 # Compute review artifacts and staged role package
 *.tfplan
 .artifacts/
+
+# Local session handoff notes (not published)
+HANDOFF.md
