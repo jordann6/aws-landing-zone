@@ -45,7 +45,8 @@ compares resource counts per root and never deletes the legacy objects.
 - About $1/month for the CMK.
 - The legacy objects are the rollback only until the first apply on the new
   backend. After that they are stale and must not be used.
-- During the cutover the CI roles can reach both buckets. Drop the legacy grant
-  (`legacy_state_bucket = ""`) once no open branch points at the old backend.
+- During the cutover the CI roles could reach both buckets. The legacy grant was
+  dropped once every branch pointed at the new backend (2026-10-06); setting
+  `legacy_state_bucket` restores it for a rollback.
 - Revisit if this account gains a second region worth replicating state into
   (cross-region replication is skipped today with a written reason).

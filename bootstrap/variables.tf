@@ -34,19 +34,20 @@ variable "state_key_prefix" {
   default     = "aws-landing-zone"
 }
 
-# Transitional: keeps the CI roles able to read and write the legacy shared
-# bucket while state is migrated and open branches rebase. Set both to "" in the
-# follow-up change once no branch points at the old backend (ADR-0003).
+# Rollback lever only. The migration finished and every branch points at the
+# dedicated backend (2026-10-06), so the CI roles no longer reach the legacy
+# shared bucket. Setting tf-state-jordprojs / aws-scp-governance here restores
+# the grant if a rollback to the legacy objects is ever needed (ADR-0003).
 variable "legacy_state_bucket" {
-  description = "Legacy shared state bucket the CI roles keep access to during the migration. Empty drops the grant."
+  description = "Legacy shared state bucket the CI roles may reach. Empty (the default) means no grant."
   type        = string
-  default     = "tf-state-jordprojs"
+  default     = ""
 }
 
 variable "legacy_state_key_prefix" {
-  description = "This repo's key prefix in the legacy shared bucket"
+  description = "This repo's key prefix in the legacy shared bucket (used only when legacy_state_bucket is set)"
   type        = string
-  default     = "aws-scp-governance"
+  default     = ""
 }
 
 # The environments that gate the write-scoped apply role. Only OIDC tokens minted
