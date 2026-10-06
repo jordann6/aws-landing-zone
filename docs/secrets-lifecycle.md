@@ -103,7 +103,7 @@ force-deleted by the same script:
 
 ```text
 invoke     {"scan_id":"20261006T170411Z","secrets_scanned":1}
-inventory  account_id 231161110714 (sandbox), kind secretsmanager,
+inventory  account sandbox, kind secretsmanager,
            name secops-positive-control, rotation_enabled False
 EMF        {"ScanCompleted":1,"SecretsNeedingAttention":1,...}
 metric     SecretsNeedingAttention 17:00 0.0, 17:04 1.0
