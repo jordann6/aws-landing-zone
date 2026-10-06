@@ -9,14 +9,15 @@ terraform {
   }
 
   # Its own state: the hardened management instance. Deployed after the workload
-  # root and a golden AMI build, destroyed first. Key keeps the original project
-  # prefix like every other root, so state stays in one place.
+  # root and a golden AMI build, destroyed first. Same dedicated backend as every
+  # other root (ADR-0003).
   backend "s3" {
-    bucket       = "tf-state-jordprojs"
-    key          = "aws-scp-governance/compute.tfstate"
+    bucket       = "jordann6-aws-landing-zone-tfstate"
+    key          = "aws-landing-zone/compute.tfstate"
     region       = "us-east-1"
     use_lockfile = true
     encrypt      = true
+    kms_key_id   = "alias/aws-landing-zone-tfstate"
   }
 }
 
@@ -43,8 +44,8 @@ provider "aws" {
 data "terraform_remote_state" "accounts" {
   backend = "s3"
   config = {
-    bucket = "tf-state-jordprojs"
-    key    = "aws-scp-governance/accounts.tfstate"
+    bucket = "jordann6-aws-landing-zone-tfstate"
+    key    = "aws-landing-zone/accounts.tfstate"
     region = "us-east-1"
   }
 }
@@ -52,8 +53,8 @@ data "terraform_remote_state" "accounts" {
 data "terraform_remote_state" "workload" {
   backend = "s3"
   config = {
-    bucket = "tf-state-jordprojs"
-    key    = "aws-scp-governance/workload.tfstate"
+    bucket = "jordann6-aws-landing-zone-tfstate"
+    key    = "aws-landing-zone/workload.tfstate"
     region = "us-east-1"
   }
   lifecycle {
