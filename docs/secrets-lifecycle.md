@@ -8,7 +8,8 @@ management: management is exempt from SCPs and should hold only org-level
 resources. Account ids come from the persistent `accounts/` state; none are
 hardcoded.
 
-Status: code complete, not yet applied. The live proof below is pending.
+Status: live in the security account and proven 2026-10-06 (results below).
+The scanner is a standing detective control, not an hourly layer.
 
 ## Access model
 
@@ -46,9 +47,12 @@ attention; a second fires after two daily periods without a completed scan, so
 a failed cross-account sweep (an AccessDenied, for example) can never look
 healthy. Both publish ALARM and OK to a customer-key-encrypted SNS topic.
 
-Incremental standing cost is about $1.80/month (one KMS key, two custom
-metrics, two alarms), plus the scanner's normal Lambda, DynamoDB and S3 usage.
-The target roles themselves are $0. No hourly compute or networking is added.
+Standing cost is a few dollars a month: about $1.80 for one KMS key, two custom
+metrics and two alarms, plus the analyzer's single-account trail. The org trail
+already records the security account's management events, so that trail is a
+second, billed copy; it is the variable part of the bill. Lambda, DynamoDB and
+S3 usage are negligible on a daily schedule. The target roles are $0. No hourly
+compute or networking is added.
 
 ## Operator steps (saved plans only)
 
@@ -73,9 +77,64 @@ terraform -chdir=../aws-secrets-lifecycle/terraform plan \
 terraform -chdir=../aws-secrets-lifecycle/terraform apply tfplan
 ```
 
-## Live proof
+## Live proof (2026-10-06)
 
-Run one synchronous scan, then read the logs, metrics and alarms:
+Every check below ran inside the security account, through a role session that
+fails closed if the assume does not land there. The scripted invoke is
+synchronous and runs the scanner only.
+
+Baseline scan, all eight accounts:
+
+```text
+invoke   StatusCode 200, no FunctionError
+         {"scan_id":"20261006T170022Z","secrets_scanned":0,"wall_clock_seconds":1.23}
+EMF      {"ScanCompleted":1,"Scanner":"secops-scanner","SecretsNeedingAttention":0,...}
+assumes  CloudTrail AssumeRole into secops-scan-target-role: 7/7 target accounts
+```
+
+Zero is the true count: no account holds a Secrets Manager secret, a
+SecureString parameter or an IAM access key. Prod holds one AWS-managed
+Inspector StringList parameter, which the scanner skips by design. A failed
+assume or sweep returns an error and fails the invocation, so a clean exit plus
+seven AssumeRole events proves every target was swept.
+
+Positive control: an empty secret shell created in sandbox, scanned, then
+force-deleted by the same script:
+
+```text
+invoke     {"scan_id":"20261006T170411Z","secrets_scanned":1}
+inventory  account_id 231161110714 (sandbox), kind secretsmanager,
+           name secops-positive-control, rotation_enabled False
+EMF        {"ScanCompleted":1,"SecretsNeedingAttention":1,...}
+metric     SecretsNeedingAttention 17:00 0.0, 17:04 1.0
+```
+
+The age alarm then fired from that single datapoint, about a minute after the
+scan:
+
+```text
+16:59:05  StateUpdate  INSUFFICIENT_DATA -> OK, SNS action executed
+17:05:05  StateUpdate  OK -> ALARM
+17:05:05  Action       Successfully executed action ...:secops-secret-alerts
+SNS       NumberOfMessagesPublished 1 (16:55 window), 1 (17:05 window)
+```
+
+It returns to OK after the next scheduled scan reports zero.
+
+Denial, IAM policy simulator against the deployed target roles (prod and
+security):
+
+```text
+allowed       ListSecrets, DescribeSecret, ssm:DescribeParameters, iam:ListUsers
+explicitDeny  GetSecretValue, BatchGetSecretValue, ssm:GetParameter,
+              ssm:GetParametersByPath, kms:Decrypt (prod)
+```
+
+The dashboard bucket has no bucket policy and all four public access block
+settings on.
+
+Unit tests cover the exact 90-day boundary. To re-run, invoke the scanner from
+a security-account session:
 
 ```bash
 aws lambda invoke --region us-east-1 --function-name secops-scanner \
@@ -83,19 +142,10 @@ aws lambda invoke --region us-east-1 --function-name secops-scanner \
   --payload '{}' scan-result.json
 aws logs filter-log-events --region us-east-1 \
   --log-group-name /aws/lambda/secops-scanner --filter-pattern '"SecOps/Secrets"'
-aws cloudwatch list-metrics --region us-east-1 --namespace SecOps/Secrets
 aws cloudwatch describe-alarms --region us-east-1 \
   --alarm-names secops-secret-age secops-secret-scan-missing \
   --query 'MetricAlarms[].{Name:AlarmName,State:StateValue,Reason:StateReason}'
 ```
-
-Pass criteria: no `FunctionError`, the EMF event shows `ScanCompleted: 1`, and
-the inventory holds rows from all eight member accounts. A denial proof assumes
-a target role and confirms `GetSecretValue` returns AccessDenied. Daily alarms
-are not immediate smoke-test signals; allow ingestion and evaluation time.
-
-Unit tests in the scanner cover the exact 90-day boundary. Disposable empty and
-renewed secrets can verify classification live; delete them afterward.
 
 ## Teardown
 

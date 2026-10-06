@@ -3,7 +3,6 @@
 The landing-zone network and reference workload have been torn down and verified.
 LLM gateway integration is cancelled. No gateway deployment, replacement provider
 keys, provider admin setup or scanner deployment is required for this cleanup.
-Preserve the prepared Phase B source work in the sibling checkouts.
 
 ## Retired gateway state history
 
@@ -52,7 +51,7 @@ git objects, symlinks, large files and unrelated projects. Preserve source chang
 review only obsolete credential-bearing artifacts for deletion, with separate
 operator authorization. Never paste credential values into chat or commit them.
 
-The prepared metadata roles and ninety-day scanner monitoring remain unapplied
-and unproven live. They are separate future security integration work, not a
-required deployment for retiring old state snapshots. No commit, push or merge
-was performed during cleanup.
+The metadata roles and ninety-day scanner monitoring are now live and proven;
+see [secrets-lifecycle.md](secrets-lifecycle.md). Old provider key retirement is
+the remaining item: delete the keys at each provider, then confirm an
+authenticated read returns 401.
