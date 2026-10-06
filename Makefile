@@ -6,6 +6,7 @@ TF_OBS ?= observability
 TF_COMP ?= compute
 TF_SEC ?= secrets
 TF_INC ?= incident
+TF_STBY ?= standby
 
 .PHONY: help
 help: ## Show this help
@@ -24,6 +25,7 @@ fmt: ## Terraform format check, all roots
 	terraform -chdir=$(TF_COMP) fmt -check -recursive
 	terraform -chdir=$(TF_SEC) fmt -check -recursive
 	terraform -chdir=$(TF_INC) fmt -check -recursive
+	terraform -chdir=$(TF_STBY) fmt -check -recursive
 
 .PHONY: validate
 validate: ## Terraform validate, all roots
@@ -35,6 +37,7 @@ validate: ## Terraform validate, all roots
 	terraform -chdir=$(TF_COMP) init -backend=false && terraform -chdir=$(TF_COMP) validate
 	terraform -chdir=$(TF_SEC) init -backend=false && terraform -chdir=$(TF_SEC) validate
 	terraform -chdir=$(TF_INC) init -backend=false && terraform -chdir=$(TF_INC) validate
+	terraform -chdir=$(TF_STBY) init -backend=false && terraform -chdir=$(TF_STBY) validate
 
 .PHONY: diagram
 diagram: ## Regenerate docs/architecture.png
@@ -111,6 +114,20 @@ destroy-compute: ## Remove the management instance, then every golden AMI and sn
 	scripts/clean-images.sh
 
 # ---- incident tooling ------------------------------------------------------------
+
+# ---- Phase D warm standby ---------------------------------------------------------
+
+.PHONY: package-standby
+package-standby: ## Build the standby API Lambda bundle (run before planning standby/)
+	scripts/package-standby.sh
+
+.PHONY: test-standby
+test-standby: ## Prove replication, 409 on standby, DNS flip and replica promotion
+	bash scripts/test-standby.sh
+
+.PHONY: clean-standby
+clean-standby: ## After destroy, delete any standby log groups left behind in both regions
+	bash scripts/clean-standby-loggroups.sh
 
 .PHONY: clean-forensics
 clean-forensics: ## Delete the forensics runbook's prod snapshots (after evidence review)

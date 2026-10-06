@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOURLY='aws_nat_gateway|aws_networkfirewall_firewall|aws_vpc_endpoint|aws_ec2_transit_gateway|aws_db_instance|aws_rds_cluster|aws_eks_cluster|aws_eks_node_group|aws_instance|aws_lb'
 
 fail=0
-for dir in compute observability terraform network workload; do
+for dir in compute observability terraform network workload standby; do
   echo "==> $dir"
   state="$(terraform -chdir="$ROOT/$dir" state list 2>/dev/null || true)"
   if [[ -z "$state" ]]; then
@@ -76,6 +76,38 @@ else
   else
     echo "  no forensics snapshots remain. OK"
   fi
+fi
+
+# Phase D standby lives in prod us-east-1 and us-west-2. State can be empty while a
+# promoted replica, a stray log group or a hosted zone survives, so ask the APIs.
+echo "==> standby layer (prod, us-east-1 and us-west-2)"
+if [[ -z "${creds:-}" ]]; then
+  echo "  no prod session. SKIPPED"
+else
+  export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+  AWS_ACCESS_KEY_ID="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["AccessKeyId"])')"
+  AWS_SECRET_ACCESS_KEY="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SecretAccessKey"])')"
+  AWS_SESSION_TOKEN="$(echo "$creds" | python3 -c 'import sys,json;print(json.load(sys.stdin)["SessionToken"])')"
+  for region in us-east-1 us-west-2; do
+    dbs="$(aws rds describe-db-instances --region "$region" --query 'DBInstances[?starts_with(DBInstanceIdentifier, `lz-standby`)].DBInstanceIdentifier' --output text 2>&1)"
+    vpcs="$(aws ec2 describe-vpcs --region "$region" --filters 'Name=tag:Name,Values=lz-standby-*' --query 'Vpcs[].VpcId' --output text 2>&1)"
+    vpce="$(aws ec2 describe-vpc-endpoints --region "$region" --filters 'Name=tag:Name,Values=lz-standby-*' --query 'VpcEndpoints[].VpcEndpointId' --output text 2>&1)"
+    fns="$(aws lambda list-functions --region "$region" --query 'Functions[?starts_with(FunctionName, `lz-standby`)].FunctionName' --output text 2>&1)"
+    logs="$(aws logs describe-log-groups --region "$region" --query 'logGroups[?contains(logGroupName, `lz-standby`)].logGroupName' --output text 2>&1)"
+    secrets="$(aws secretsmanager list-secrets --region "$region" --query 'SecretList[?starts_with(Name, `lz-standby`)].Name' --output text 2>&1)"
+    for pair in "RDS:$dbs" "VPC:$vpcs" "endpoint:$vpce" "Lambda:$fns" "log group:$logs" "secret:$secrets"; do
+      if [[ -n "${pair#*:}" ]]; then
+        echo "  $region ${pair%%:*} still present: ${pair#*:}"
+        fail=1
+      fi
+    done
+  done
+  zones="$(aws route53 list-hosted-zones --query 'HostedZones[?Name==`failover.jordandesigns.io.`].Id' --output text 2>&1)"
+  hcs="$(aws route53 list-health-checks --query 'HealthChecks[].Id' --output text 2>&1)"
+  [[ -n "$zones" ]] && { echo "  hosted zone still present: $zones"; fail=1; }
+  [[ -n "$hcs" ]] && { echo "  Route 53 health checks present: $hcs"; fail=1; }
+  [[ $fail -eq 0 ]] && echo "  no standby resources remain. OK"
+  echo "  (multi-region KMS keys pending deletion are expected until the 7 day window closes)"
 fi
 
 if [[ $fail -ne 0 ]]; then

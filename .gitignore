@@ -35,3 +35,6 @@ backend_override.tf
 
 # Local session handoff notes (not published)
 HANDOFF.md
+
+# standby proof build artifacts
+standby/build/

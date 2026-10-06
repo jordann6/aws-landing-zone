@@ -107,7 +107,7 @@ policy through a reviewed accounts plan.
 
 `workload/compute-defaults.tf`:
 
-- `aws_ebs_encryption_by_default` plus `aws_ebs_default_kms_key` set to a
+- `aws_ebs_default_kms_key` set to a
   dedicated `alias/prod-ebs` CMK with rotation. The key policy mirrors the
   AWS-managed `aws/ebs` key (any principal in the account, only through EC2). This
   covers the Auto Scaling and Image Builder service-linked roles without naming

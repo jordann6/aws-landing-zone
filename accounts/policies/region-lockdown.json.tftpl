@@ -4,34 +4,27 @@
     {
       "Sid": "DenyNonApprovedRegions",
       "Effect": "Deny",
-      "NotAction": [
-        "budgets:*",
-        "ce:*",
-        "cloudfront:*",
-        "cur:*",
-        "globalaccelerator:*",
-        "health:*",
-        "iam:*",
-        "organizations:*",
-        "pricing:*",
-        "route53:*",
-        "route53domains:*",
-        "s3:GetAccountPublic*",
-        "s3:ListAllMyBuckets",
-        "s3:PutAccountPublic*",
-        "shield:*",
-        "sts:*",
-        "support:*",
-        "trustedadvisor:*",
-        "waf:*",
-        "wafv2:*"
-      ],
+      "NotAction": ${exempt_actions},
       "Resource": "*",
       "Condition": {
         "StringNotEquals": {
           "aws:RequestedRegion": ${allowed_regions}
         }
       }
-    }
+    }%{ if standby_region != "" },
+    {
+      "Sid": "DenyStandbyRegionOutsideProd",
+      "Effect": "Deny",
+      "NotAction": ${exempt_actions},
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "${standby_region}"
+        },
+        "StringNotEquals": {
+          "aws:PrincipalAccount": "${standby_account_id}"
+        }
+      }
+    }%{ endif }
   ]
 }

@@ -12,12 +12,28 @@ resource "aws_organizations_policy" "deny_root_user" {
   content     = file("${path.module}/policies/deny-root-user.json")
 }
 
+locals {
+  # Global services stay reachable from any region.
+  region_exempt_actions = [
+    "budgets:*", "ce:*", "cloudfront:*", "cur:*", "globalaccelerator:*", "health:*",
+    "iam:*", "organizations:*", "pricing:*", "route53:*", "route53domains:*",
+    "s3:GetAccountPublic*", "s3:ListAllMyBuckets", "s3:PutAccountPublic*", "shield:*",
+    "sts:*", "support:*", "trustedadvisor:*", "waf:*", "wafv2:*",
+  ]
+  # Phase D: the standby region is allowed by the first statement and then denied
+  # again to every account except prod by the second, so only prod can use it.
+  standby_enabled = var.standby_region != ""
+}
+
 resource "aws_organizations_policy" "region_lockdown" {
   name        = "region-lockdown"
   description = "Restrict API calls to approved regions only"
   type        = "SERVICE_CONTROL_POLICY"
   content = templatefile("${path.module}/policies/region-lockdown.json.tftpl", {
-    allowed_regions = jsonencode(var.allowed_regions)
+    exempt_actions     = jsonencode(local.region_exempt_actions)
+    allowed_regions    = jsonencode(local.standby_enabled ? concat(var.allowed_regions, [var.standby_region]) : var.allowed_regions)
+    standby_region     = var.standby_region
+    standby_account_id = local.standby_enabled ? one(aws_organizations_account.prod[*].id) : ""
   })
 }
 
