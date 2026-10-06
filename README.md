@@ -1,5 +1,17 @@
 # AWS Landing Zone
 
+**Compute baseline status:** queued after Azure and GCP. New IMDSv2 and EBS
+encryption SCPs plus an EC2 declarative policy will first be planned for the
+Sandbox OU. The operator applies governance before a reduced workload network
+or compute deployment. A private SSM management VM from this zone's golden AMI
+and its live guest-hardening proof are pending. Existing verification below
+covers the earlier EKS/RDS and network demo.
+
+The public repository is
+[jordann6/aws-landing-zone](https://github.com/jordann6/aws-landing-zone).
+Historical Terraform state keys and resource tags keep their internal names;
+renaming those requires a separate migration plan.
+
 A Terraform AWS landing zone with a persistent multi-account organization,
 inherited guardrails, centralized audit and security controls, and an inspected
 private workload network. The reference workload is private EKS and Multi-AZ

@@ -123,4 +123,4 @@ BUILD ORDER FOR THIS CLOUD:
 7. Supply chain + (if this is the live-k8s cloud) the paved-road cluster demo.
 8. Deliverables: make deploy/test/destroy, docs/architecture.png (+ diagram.py), cis-mapping.md, access-model.md, accelerator-vs-bespoke note, and the README.
 
-Start by reading the design doc and the current state of the target cloud's repo, then propose a build plan for phase 1 (pipeline wiring) before writing code. My AWS repo today is aws-scp-governance (SCPs + org only, no networking yet); Azure is azure-landing-zone; GCP is gcp-landing-zone.
+Start by reading the design doc and the current state of the target cloud's repo, then propose a build plan for phase 1 (pipeline wiring) before writing code. The AWS repository is aws-landing-zone, with organization guardrails, governance, observability, networking, and a workload reference; Azure is azure-landing-zone; GCP is gcp-landing-zone.
