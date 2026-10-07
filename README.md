@@ -11,6 +11,21 @@ reboot, `scripts/test-compute.sh` 17/17, `scripts/verify-teardown.sh` clean. See
 the first live bake forced.
 Existing verification below covers the earlier EKS/RDS and network demo.
 
+**Incident tooling status:** deployed, proven and torn down on 2026-10-06. The forensics
+runbook and finding routing stay up as standing controls in the security account. Drills
+and a forced-alarm remediation with an RDS failover passed; the live run found two real
+bugs (an evidence step that ran before the snapshot finished, and an SCP that made a
+resource undestroyable). The Claude-written summary is built but **unproven** (Bedrock
+entitlement), so the proof used template summaries. See
+[docs/incident-response.md](docs/incident-response.md).
+
+**Warm standby status:** the us-west-2 data-tier standby was deployed, proven and
+destroyed on 2026-10-07. `scripts/test-standby.sh` passed 8 of 8: encrypted cross-region
+replica on a multi-region key, replication, DNS failover, and automated replica promotion.
+A full second hub was designed and not built. See
+[docs/warm-standby-design.md](docs/warm-standby-design.md).
+
+
 The public repository is
 [jordann6/aws-landing-zone](https://github.com/jordann6/aws-landing-zone).
 State moved to a dedicated backend under `aws-landing-zone/` keys
@@ -27,7 +42,8 @@ PostgreSQL. Application integration is outside the completion scope.
 The diagram shows the infrastructure design and configured relationships, not a
 running application or proof of traffic. Blue clusters are retained foundations;
 orange clusters are temporary network and workload layers. Dev, test and sandbox
-accounts exist without deployed spoke VPCs. Cross-region backup is disabled.
+accounts exist without deployed spoke VPCs. Cross-region backup is disabled; the
+standby uses a cross-region RDS replica.
 
 ## Current status and remaining work
 

@@ -1,6 +1,7 @@
 # Phase D: us-west-2 warm standby, design and cost gate
 
-Status: Option B approved. Code written, nothing applied yet.
+Status: Option B built, proven and destroyed on 2026-10-07. See [Result](#result). The rest of this
+document is the design and cost gate as approved.
 
 ## Recommendation
 
@@ -100,3 +101,38 @@ this proof does not need.
 2. us-west-2 opened by a prod-only SCP exception (accounts root), not an org-wide add.
 3. Proof uses `route53 test-dns-answer`, no ACM, no delegation.
 4. `aws_ebs_encryption_by_default` dropped from the workload root.
+
+## Result
+
+Applied as saved plans (accounts SCP exception, then 75 standby resources), proven, then
+destroyed (75 of 75) and the SCP closed again. `scripts/test-standby.sh` passed 8 of 8:
+
+| Check | Result |
+|---|---|
+| Both regions healthy | Pass |
+| Replica encrypted with the multi-region CMK replica in us-west-2 | Pass |
+| Row written on the primary appears on the standby | Pass |
+| Standby write while a replica | 409 |
+| DNS answer while healthy | Primary |
+| Primary broken, DNS answer | Flipped to us-west-2 |
+| Health alarm crosses regions, Lambda promotes the replica | Pass, replica available as a standalone instance |
+| Write on the standby after promotion | Accepted (201) |
+
+Traffic shifted by DNS first. Promotion followed on its own clock, which is the design
+point: stateless failover is a DNS feature, stateful failover needs orchestration.
+
+What was not proven or not built: the full mirror (Option A), a real delegated subdomain
+with ACM, cross-region backup copy, and failback. Failback is destroy and redeploy.
+Promotion is one way, so the promoted replica is never re-applied.
+
+### Lessons
+
+- The region exception is two SCP statements: allow us-west-2 for everyone, then deny it
+  to every account except prod. A single statement cannot express "this region, this
+  account". Closing the region again is an accounts apply without `standby_region`.
+- Closing the region also blocks the verification calls. Run `verify-teardown` before
+  closing, or the script reports the region as SKIPPED. This run's us-west-2 evidence is
+  Terraform's own 75 of 75 destroy and an empty state, not a live listing.
+- A Lambda that logs after destroy can recreate its log group. `make clean-standby`
+  removes any `lz-standby` groups in both regions.
+- The multi-region KMS keys carry a 7 day deletion window in both regions.
