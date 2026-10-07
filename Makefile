@@ -4,6 +4,7 @@ TF_NET ?= network
 TF_WORK ?= workload
 TF_OBS ?= observability
 TF_COMP ?= compute
+TF_SEC ?= secrets
 
 .PHONY: help
 help: ## Show this help
@@ -20,6 +21,7 @@ fmt: ## Terraform format check, all roots
 	terraform -chdir=$(TF_WORK) fmt -check -recursive
 	terraform -chdir=$(TF_OBS) fmt -check -recursive
 	terraform -chdir=$(TF_COMP) fmt -check -recursive
+	terraform -chdir=$(TF_SEC) fmt -check -recursive
 
 .PHONY: validate
 validate: ## Terraform validate, all roots
@@ -29,6 +31,7 @@ validate: ## Terraform validate, all roots
 	terraform -chdir=$(TF_WORK) init -backend=false && terraform -chdir=$(TF_WORK) validate
 	terraform -chdir=$(TF_OBS) init -backend=false && terraform -chdir=$(TF_OBS) validate
 	terraform -chdir=$(TF_COMP) init -backend=false && terraform -chdir=$(TF_COMP) validate
+	terraform -chdir=$(TF_SEC) init -backend=false && terraform -chdir=$(TF_SEC) validate
 
 .PHONY: diagram
 diagram: ## Regenerate docs/architecture.png

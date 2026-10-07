@@ -4,8 +4,7 @@ The completion scope is the persistent organization, accounts and guardrails,
 base governance, observability, shared inspection network, and the private EKS
 and Multi-AZ PostgreSQL reference workload. LLM gateway integration is cancelled.
 No provider keys, container publication, Fargate service, or provider demo is
-required to finish this infrastructure scope. The standalone gateway checkout
-and Phase B changes remain preserved for separate work.
+required to finish this infrastructure scope.
 
 ## Verified infrastructure
 
@@ -20,8 +19,9 @@ organization onboarding remains enabled.
 This proves infrastructure metadata and routing configuration. It does not
 claim forced RDS failover timing, a deployed application, or an end-to-end
 firewall traffic test. Cross-region backup is disabled until a destination region
-is approved through governance. Existing Phase B scanner live proof and legacy
-secret-history/key cleanup remain pending; they are not represented as completed.
+is approved through governance. The secrets scanner live proof is complete (see
+[secrets-lifecycle.md](secrets-lifecycle.md)); retiring the old gateway provider
+keys remains pending and is not represented as completed.
 
 Gateway-specific provider domains, output contracts and the DynamoDB endpoint
 were removed from configuration. Generic HOME_NET, TGW routing, accepter fixes,
@@ -93,11 +93,11 @@ under `/private/tmp` must be recreated if unavailable.
 Format, Terraform validation and local static security checks passed during
 closeout; subsequent documentation diff and link checks also passed. Review the
 final diff before publication. Commit, push and merge only when requested.
-Preserve sibling Phase A/B work. Document deferred features and proof limits,
+Document deferred features and proof limits,
 update the private handoff, and check billing after Cost Explorer data catches up.
 Legacy gateway state-history cleanup is complete: 20 obsolete versions were
 deleted and zero remain, with the latest clean state retained. Old-key retirement
-and scanner live proof remain independent work; see
+remains independent work; see
 [the separate cleanup runbook](security-cleanup.md).
 
 For future demos, export private account/network metadata using

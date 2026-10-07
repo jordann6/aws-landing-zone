@@ -8,7 +8,7 @@ The output path is relative to this source file, independent of the working dire
 from pathlib import Path
 
 from diagrams import Cluster, Diagram, Edge
-from diagrams.aws.compute import EC2, EKS, EC2ContainerRegistry, EC2ImageBuilder
+from diagrams.aws.compute import EC2, EKS, EC2ContainerRegistry, EC2ImageBuilder, Lambda
 from diagrams.aws.database import RDS
 from diagrams.aws.management import (
     Cloudtrail,
@@ -49,6 +49,7 @@ with Diagram(
             config = Config("AWS Config")
             findings = CloudwatchEventEventBased("Finding alerts\nEventBridge / SNS")
             guardduty >> Edge(style="dashed") >> findings
+            scanner = Lambda("Secrets scanner\n90-day age alarms")
 
         with Cluster("Log-archive account", graph_attr=RETAINED):
             trail = Cloudtrail("Organization audit\nall member accounts")
@@ -59,6 +60,7 @@ with Diagram(
             monitoring = Cloudwatch("OAM + central alarms\nprod and network sources")
 
         other_accounts = OrganizationsAccount("Dev / test / sandbox\naccounts; no VPCs")
+        scanner >> Edge(style="dashed", label="metadata-only\nscan roles, all members") >> other_accounts
 
     with Cluster("TEMPORARY | workload first, network second", graph_attr=TEMPORARY):
         with Cluster("TEAR DOWN SECOND | network account | us-east-1", graph_attr=TEMPORARY):

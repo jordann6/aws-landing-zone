@@ -57,17 +57,20 @@ central alarms remain present.
 
 The demonstrated hourly layers have been removed. Retained baseline services,
 KMS deletion windows and storage can still generate charges; check billing after
-reporting catches up. Review the final source diff and preserve sibling Phase A/B
-work. Follow the [completion runbook](docs/completion.md) for verification and
+reporting catches up. Follow the [completion runbook](docs/completion.md) for verification and
 future demo lifecycle guidance. Commit, push and merge only when requested.
 
-LLM gateway integration is cancelled and was never deployed. Its checkout and
-Phase B work remain preserved separately. Provider domains and gateway output
+LLM gateway integration is cancelled and was never deployed. Provider domains and gateway output
 contracts have been removed from configuration. Network allowlist edits were not
 applied before the hub was removed; workload integration resources have also
 been removed. Legacy state-history cleanup is complete: 20 obsolete gateway
-versions were deleted and the latest clean state retained. Phase B scanner live
-verification and old-key retirement remain separate unfinished work.
+versions were deleted and the latest clean state retained. Retiring the old
+gateway provider keys remains separate unfinished work.
+
+The secrets scanner is live in the security account (a few dollars a month): seven
+metadata-only target roles plus its own, a cross-account scan that assumed into
+every member account, and a positive control where an empty secret created in
+sandbox was inventoried and flagged. See [docs/secrets-lifecycle.md](docs/secrets-lifecycle.md).
 
 ## Account and policy boundaries
 
@@ -215,6 +218,7 @@ and destroys are run by the operator using reviewed, saved plans.
 
 - [Completion runbook](docs/completion.md): completed teardown, verification and closeout steps.
 - [Separate security cleanup](docs/security-cleanup.md): retired state-history cleanup without redeploying the gateway.
+- [Secrets lifecycle](docs/secrets-lifecycle.md): metadata-only scanner roles in every member account, ninety-day credential alarms and the live proof.
 - [Compute baseline](docs/compute-baseline.md): guardrails, golden AMI, patching, management instance and their proofs.
 - [CIS mapping](docs/cis-mapping.md): controls mapped to resources and policies, with scope limitations.
 - [Access model](docs/access-model.md): personas, account scope and permissions.
