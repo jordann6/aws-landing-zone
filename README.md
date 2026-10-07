@@ -68,8 +68,8 @@ repositories with their own history and a landing-zone mode:
 
 | Repository | Role in this landing zone |
 |---|---|
-| [aws-incident-forensics](https://github.com/jordann6/aws-incident-forensics/tree/lz-integration) | Containment and evidence runbook, a standing control in the security account |
-| [aws-incident-responder](https://github.com/jordann6/aws-incident-responder/tree/lz-integration) | Private n8n remediation workflow in the prod account, hourly |
+| [aws-incident-forensics](https://github.com/jordann6/aws-incident-forensics) | Containment and evidence runbook, a standing control in the security account |
+| [aws-incident-responder](https://github.com/jordann6/aws-incident-responder) | Private n8n remediation workflow in the prod account, hourly |
 | [aws-secrets-lifecycle](https://github.com/jordann6/aws-secrets-lifecycle) | The scanner deployed into the security account |
 
 The portfolio write-up is the AWS Landing Zone case study at
