@@ -9,6 +9,8 @@ from pathlib import Path
 
 from diagrams import Cluster, Diagram, Edge
 from diagrams.aws.compute import EC2, EKS, EC2ContainerRegistry, EC2ImageBuilder, Lambda
+from diagrams.aws.integration import StepFunctions
+from diagrams.aws.network import Route53
 from diagrams.aws.database import RDS
 from diagrams.aws.management import (
     Cloudtrail,
@@ -28,7 +30,7 @@ TEMPORARY = {"bgcolor": "#fff4e7", "color": "#d49447", "fontsize": "17"}
 
 with Diagram(
     "AWS Landing Zone | retained foundation and temporary demo\n"
-    "Configured relationships; no application deployed; cross-region backup disabled",
+    "Configured relationships; no application deployed; standby proven then destroyed",
     filename=str(Path(__file__).resolve().with_name("architecture")),
     show=False,
     direction="TB",
@@ -50,6 +52,8 @@ with Diagram(
             findings = CloudwatchEventEventBased("Finding alerts\nEventBridge / SNS")
             guardduty >> Edge(style="dashed") >> findings
             scanner = Lambda("Secrets scanner\n90-day age alarms")
+            forensics = StepFunctions("Forensics runbook\nisolate, snapshot, revoke")
+            findings >> Edge(style="dashed", label="GuardDuty finding") >> forensics
 
         with Cluster("Log-archive account", graph_attr=RETAINED):
             trail = Cloudtrail("Organization audit\nall member accounts")
@@ -96,3 +100,10 @@ with Diagram(
             rds >> Edge(style="dashed", label="backup selection") >> backup
 
         prod >> Edge(color="#ac6413", label="egress + inspected return", constraint="false") >> tgw
+
+    with Cluster("TEMPORARY | prod account | us-west-2 warm standby (proven, destroyed)", graph_attr=TEMPORARY):
+        dns = Route53("Route 53 failover\nhealth check on primary")
+        replica = RDS("Cross-region replica of prod RDS\nmulti-region KMS")
+        promote = Lambda("Promote Lambda\nalarm crosses regions")
+        dns >> Edge(label="alarm") >> promote
+        promote >> Edge(label="PromoteReadReplica") >> replica

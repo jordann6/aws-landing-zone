@@ -102,9 +102,11 @@ resource "aws_kms_alias" "ebs" {
   target_key_id = aws_kms_key.ebs.key_id
 }
 
-resource "aws_ebs_encryption_by_default" "this" {
-  enabled = true
-}
+# Default EBS encryption itself is NOT managed here. The Workloads OU declarative
+# policy (accounts/compute-baseline.tf) turns it on, and the require-encrypted-ebs
+# SCP denies ec2:DisableEbsEncryptionByDefault, so an account-level resource could
+# never be destroyed (the live run's workload destroy failed on it). Only the
+# default KMS key below is set per account.
 
 resource "aws_ebs_default_kms_key" "this" {
   key_arn = aws_kms_key.ebs.arn

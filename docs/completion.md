@@ -1,5 +1,11 @@
 # AWS landing-zone completion
 
+Later phases are complete as well: the compute baseline ([compute-baseline.md](compute-baseline.md)),
+the secrets scanner ([secrets-lifecycle.md](secrets-lifecycle.md)), incident tooling
+([incident-response.md](incident-response.md)) and the us-west-2 warm standby
+([warm-standby-design.md](warm-standby-design.md)). Each was deployed, proven and torn down;
+the sections below cover the original network and workload scope.
+
 The completion scope is the persistent organization, accounts and guardrails,
 base governance, observability, shared inspection network, and the private EKS
 and Multi-AZ PostgreSQL reference workload. LLM gateway integration is cancelled.
@@ -18,8 +24,8 @@ organization onboarding remains enabled.
 
 This proves infrastructure metadata and routing configuration. It does not
 claim forced RDS failover timing, a deployed application, or an end-to-end
-firewall traffic test. Cross-region backup is disabled until a destination region
-is approved through governance. The secrets scanner live proof is complete (see
+firewall traffic test. Cross-region backup stays disabled; the standby uses a
+cross-region RDS replica instead, proven separately. The secrets scanner live proof is complete (see
 [secrets-lifecycle.md](secrets-lifecycle.md)); retiring the old gateway provider
 keys remains pending and is not represented as completed.
 
@@ -104,3 +110,14 @@ For future demos, export private account/network metadata using
 `scripts/prepare-workload-inputs.py`, with `--workload` after network deployment.
 The old exporter filename remains a compatibility entry point. Future plans
 no longer publish gateway contracts or allow provider API domains by default.
+
+## Final state after the last phases
+
+Standing: accounts, governance, observability, the secrets scanner and the forensics
+runbook (security account), KMS keys, state backend. Hourly layers: none. The last full
+`verify-teardown` was clean for us-east-1. The us-west-2 standby layer was destroyed by
+Terraform (75 of 75, empty state) but not listed live afterward, because the region was
+closed again before verification; see [warm-standby-design.md](warm-standby-design.md).
+
+Open and not done: confirming the security-findings SNS subscription, the Claude summary
+path (built, unproven, Bedrock entitlement), and retiring the old gateway provider keys.

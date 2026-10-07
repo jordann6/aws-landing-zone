@@ -49,3 +49,9 @@ variable "workloads_allowed_images_state" {
     error_message = "workloads_allowed_images_state must be audit_mode or enabled."
   }
 }
+
+variable "standby_region" {
+  description = "DR region opened for the prod account only (Phase D warm standby). Empty keeps the lockdown at allowed_regions everywhere"
+  type        = string
+  default     = ""
+}

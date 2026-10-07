@@ -1,7 +1,8 @@
 # Finding routing, in the security account. GuardDuty and Security Hub are both
 # administered from here, so findings from every member account land on this
 # account's default event bus. HIGH and CRITICAL findings go to one topic, which
-# the forensics runbook (Phase D) and an optional email subscribe to.
+# the forensics runbook (aws-incident-forensics, security account) and an
+# optional email subscribe to.
 
 data "aws_iam_policy_document" "findings_key" {
   #checkov:skip=CKV_AWS_356:KMS key policies scope by principal/condition; Resource "*" means "this key" and is the required idiom.
@@ -75,10 +76,13 @@ data "aws_iam_policy_document" "findings_topic" {
     condition {
       test     = "ArnEquals"
       variable = "aws:SourceArn"
-      values = [
-        aws_cloudwatch_event_rule.guardduty_high.arn,
-        aws_cloudwatch_event_rule.securityhub_high.arn,
-      ]
+      values = concat(
+        [
+          aws_cloudwatch_event_rule.guardduty_high.arn,
+          aws_cloudwatch_event_rule.securityhub_high.arn,
+        ],
+        aws_cloudwatch_event_rule.forensics_drill[*].arn,
+      )
     }
   }
 }
@@ -149,6 +153,36 @@ resource "aws_cloudwatch_event_target" "securityhub_high" {
   provider = aws.security
 
   rule      = aws_cloudwatch_event_rule.securityhub_high.name
+  target_id = "security-findings"
+  arn       = aws_sns_topic.findings.arn
+}
+
+# Forensics drill, off by default. GuardDuty sample findings name a fictitious
+# instance, so they prove routing but cannot drive containment of a real host.
+# A drill event is GuardDuty-shaped (same detail as a real finding) and names a
+# real instance; it can only be sent from inside the security account, and the
+# rule exists only while enable_forensics_drill is true for a proof session.
+resource "aws_cloudwatch_event_rule" "forensics_drill" {
+  count    = var.enable_forensics_drill ? 1 : 0
+  provider = aws.security
+
+  name        = "forensics-drill"
+  description = "GuardDuty-shaped drill findings for the forensics runbook proof"
+
+  event_pattern = jsonencode({
+    source        = ["lz.forensics.drill"]
+    "detail-type" = ["GuardDuty Finding"]
+    detail = {
+      severity = [{ numeric = [">=", 7] }]
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "forensics_drill" {
+  count    = var.enable_forensics_drill ? 1 : 0
+  provider = aws.security
+
+  rule      = aws_cloudwatch_event_rule.forensics_drill[0].name
   target_id = "security-findings"
   arn       = aws_sns_topic.findings.arn
 }

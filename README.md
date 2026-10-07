@@ -11,6 +11,21 @@ reboot, `scripts/test-compute.sh` 17/17, `scripts/verify-teardown.sh` clean. See
 the first live bake forced.
 Existing verification below covers the earlier EKS/RDS and network demo.
 
+**Incident tooling status:** deployed, proven and torn down on 2026-10-06. The forensics
+runbook and finding routing stay up as standing controls in the security account. Drills
+and a forced-alarm remediation with an RDS failover passed; the live run found two real
+bugs (an evidence step that ran before the snapshot finished, and an SCP that made a
+resource undestroyable). The Claude-written summary is built but **unproven** (Bedrock
+entitlement), so the proof used template summaries. See
+[docs/incident-response.md](docs/incident-response.md).
+
+**Warm standby status:** the us-west-2 data-tier standby was deployed, proven and
+destroyed on 2026-10-07. `scripts/test-standby.sh` passed 8 of 8: encrypted cross-region
+replica on a multi-region key, replication, DNS failover, and automated replica promotion.
+A full second hub was designed and not built. See
+[docs/warm-standby-design.md](docs/warm-standby-design.md).
+
+
 The public repository is
 [jordann6/aws-landing-zone](https://github.com/jordann6/aws-landing-zone).
 State moved to a dedicated backend under `aws-landing-zone/` keys
@@ -27,7 +42,38 @@ PostgreSQL. Application integration is outside the completion scope.
 The diagram shows the infrastructure design and configured relationships, not a
 running application or proof of traffic. Blue clusters are retained foundations;
 orange clusters are temporary network and workload layers. Dev, test and sandbox
-accounts exist without deployed spoke VPCs. Cross-region backup is disabled.
+accounts exist without deployed spoke VPCs. Cross-region backup is disabled; the
+standby uses a cross-region RDS replica.
+
+## Proven in live runs
+
+Every layer below was deployed, proven against the real organization, and torn down.
+Results are from saved plans applied by the operator, not from plans alone.
+
+| Layer | What was proven | Where |
+|---|---|---|
+| Guardrails and compute | 20/20 guardrail denials, hardened golden AMI after reboot, private management instance 17/17 | [compute-baseline](docs/compute-baseline.md) |
+| Secrets scanner | Cross-account scan of all members, positive control flagged, value reads explicitly denied | [secrets-lifecycle](docs/secrets-lifecycle.md) |
+| Incident tooling | Finding to forensics runbook, isolation drill with encrypted evidence, forced alarm to RDS failover in about 35 seconds | [incident-response](docs/incident-response.md) |
+| Warm standby | us-west-2 replica on a multi-region key, DNS failover, automated promotion, 8/8 checks | [warm-standby-design](docs/warm-standby-design.md) |
+
+Not proven, stated plainly: Claude-written incident summaries (built, blocked by a Bedrock
+account entitlement), end-to-end firewall traffic, and a live listing of us-west-2 after the
+standby was destroyed (Terraform's destroy and empty state are the evidence).
+
+## Companion repositories
+
+The incident tooling runs here as a landing-zone control. The projects are separate
+repositories with their own history and a landing-zone mode:
+
+| Repository | Role in this landing zone |
+|---|---|
+| [aws-incident-forensics](https://github.com/jordann6/aws-incident-forensics/tree/lz-integration) | Containment and evidence runbook, a standing control in the security account |
+| [aws-incident-responder](https://github.com/jordann6/aws-incident-responder/tree/lz-integration) | Private n8n remediation workflow in the prod account, hourly |
+| [aws-secrets-lifecycle](https://github.com/jordann6/aws-secrets-lifecycle) | The scanner deployed into the security account |
+
+The portfolio write-up is the AWS Landing Zone case study at
+[jordandesigns.io](https://jordandesigns.io).
 
 ## Current status and remaining work
 
@@ -97,6 +143,9 @@ the network does not disable sharing for future demos.
 | `network/` | Shared TGW, inspection VPC, firewall, NAT, endpoints and network logs | Temporary, hourly billing |
 | `workload/` | Private prod VPC, EKS, RDS, backup, EC2 defaults, golden AMI pipeline and SSM patching | Temporary, hourly billing |
 | `compute/` | Hardened management instance from the golden AMI, SSM-only access | Temporary, destroyed first |
+| `secrets/` | Metadata-only scan-target roles for the secrets scanner in every member account | Retained, near zero cost |
+| `incident/` | Finding routing, alarm reader, n8n image mirror, forensics runbook and the responder (LZ mode) | Forensics retained, responder temporary |
+| `standby/` | us-west-2 warm standby: multi-region KMS, encrypted cross-region replica, Route 53 failover, promotion | Temporary, destroyed after proof |
 
 Phase A observability is included in this repository. Its shared-services
 CloudWatch OAM sink, prod/network links, central alarms and security findings
@@ -219,6 +268,8 @@ and destroys are run by the operator using reviewed, saved plans.
 - [Completion runbook](docs/completion.md): completed teardown, verification and closeout steps.
 - [Separate security cleanup](docs/security-cleanup.md): retired state-history cleanup without redeploying the gateway.
 - [Secrets lifecycle](docs/secrets-lifecycle.md): metadata-only scanner roles in every member account, ninety-day credential alarms and the live proof.
+- [Incident response](docs/incident-response.md): forensics runbook and responder in the org, the live proofs, the bugs they found and what is unproven.
+- [Warm standby](docs/warm-standby-design.md): the us-west-2 design and cost gate, with the live result and teardown lessons.
 - [Compute baseline](docs/compute-baseline.md): guardrails, golden AMI, patching, management instance and their proofs.
 - [CIS mapping](docs/cis-mapping.md): controls mapped to resources and policies, with scope limitations.
 - [Access model](docs/access-model.md): personas, account scope and permissions.

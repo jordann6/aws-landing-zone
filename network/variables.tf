@@ -36,7 +36,10 @@ variable "az" {
 variable "allowed_egress_domains" {
   description = "Domains the firewall permits outbound; everything else is denied"
   type        = list(string)
-  default     = [".amazonaws.com", ".amazoncognito.com"]
+  # bedrock-mantle is the Messages API endpoint for Claude in Amazon Bedrock
+  # (incident responder summaries). It is on api.aws, not amazonaws.com, so it
+  # is listed exactly; IAM and the region still bound what may be called there.
+  default = [".amazonaws.com", ".amazoncognito.com", "bedrock-mantle.us-east-1.api.aws"]
 }
 
 variable "inspected_spoke_cidrs" {

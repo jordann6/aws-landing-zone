@@ -1,9 +1,8 @@
 # The hardened management instance. Every landing zone runs one: built from that
 # zone's golden image, no public IP, reachable only through the cloud-native
 # path (here SSM Session Manager over the workload's interface endpoints), and
-# patched by the zone's patch service. It is also the intended target for the
-# forensics and remediation runbooks (aws-incident-forensics quarantine and
-# snapshot, event-driven-aws-remediation), wired in the observability phase.
+# patched by the zone's patch service. It is also the quarantine target of the
+# forensics runbook (aws-incident-forensics, wired through the incident/ root).
 
 locals {
   workload = data.terraform_remote_state.workload.outputs
@@ -52,6 +51,12 @@ resource "aws_iam_role" "management" {
   count              = var.enable_management_instance ? 1 : 0
   name               = "prod-${local.name}"
   assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
+
+  # The forensics runbook may revoke sessions only on roles under this path, so
+  # the path is the containment boundary. Its revoke step adds an inline deny
+  # that is not in state; force_detach lets destroy remove it.
+  path                  = "/lz-compute/"
+  force_detach_policies = true
 }
 
 resource "aws_iam_role_policy_attachment" "management_ssm" {
