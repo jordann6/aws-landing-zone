@@ -95,6 +95,13 @@ else
     fns="$(aws lambda list-functions --region "$region" --query 'Functions[?starts_with(FunctionName, `lz-standby`)].FunctionName' --output text 2>&1)"
     logs="$(aws logs describe-log-groups --region "$region" --query 'logGroups[?contains(logGroupName, `lz-standby`)].logGroupName' --output text 2>&1)"
     secrets="$(aws secretsmanager list-secrets --region "$region" --query 'SecretList[?starts_with(Name, `lz-standby`)].Name' --output text 2>&1)"
+    # A region the lockdown SCP has closed again cannot be listed at all. That is
+    # not "clean": verify BEFORE closing the region, then close it.
+    if [[ "$dbs$vpcs$fns" == *"explicit deny in a service control policy"* ]]; then
+      echo "  $region closed by the region-lockdown SCP, cannot be inspected. SKIPPED"
+      echo "  (run this script before closing the standby region to verify it live)"
+      continue
+    fi
     for pair in "RDS:$dbs" "VPC:$vpcs" "endpoint:$vpce" "Lambda:$fns" "log group:$logs" "secret:$secrets"; do
       if [[ -n "${pair#*:}" ]]; then
         echo "  $region ${pair%%:*} still present: ${pair#*:}"
