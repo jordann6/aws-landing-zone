@@ -6,8 +6,10 @@
 # the hub TGW does not route spoke to spoke.
 
 locals {
-  app_cidrs = [local.subnets.app_a.cidr, local.subnets.app_b.cidr]
-  db_port   = 5432
+  app_cidrs          = [local.subnets.app_a.cidr, local.subnets.app_b.cidr]
+  node_cidrs         = [for k, s in local.subnets : s.cidr if s.tier == "node"]
+  data_ingress_cidrs = concat(local.app_cidrs, local.node_cidrs)
+  db_port            = 5432
 }
 
 #trivy:ignore:AVD-AWS-0104:Egress to 0.0.0.0/0 on 443 is intentional; the hub Network Firewall (not this SG) enforces the destination allowlist.
@@ -73,8 +75,9 @@ resource "aws_security_group" "db" {
   tags = { Name = "prod-db" }
 }
 
-# NACL on the data subnets: only the app subnets may reach them, and only on the
-# DB port plus ephemeral return. Everything else is denied at the subnet edge.
+# NACL on the data subnets: only the app and EKS node subnets may reach them, and
+# only on the DB port plus ephemeral return. Node subnets are included because the
+# VPC CNI gives pods IPs from them. Everything else is denied at the subnet edge.
 resource "aws_network_acl" "data" {
   #checkov:skip=CKV2_AWS_1:The NACL is attached to the data subnets via subnet_ids on this resource.
   vpc_id     = aws_vpc.prod.id
@@ -83,14 +86,14 @@ resource "aws_network_acl" "data" {
 }
 
 resource "aws_network_acl_rule" "data_in_db" {
-  count = length(local.app_cidrs)
+  count = length(local.data_ingress_cidrs)
 
   network_acl_id = aws_network_acl.data.id
   rule_number    = 100 + count.index
   egress         = false
   protocol       = "tcp"
   rule_action    = "allow"
-  cidr_block     = local.app_cidrs[count.index]
+  cidr_block     = local.data_ingress_cidrs[count.index]
   from_port      = local.db_port
   to_port        = local.db_port
 }
