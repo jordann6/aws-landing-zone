@@ -14,15 +14,16 @@ on:
 # destroy.yml and ttl-guard.yml) pins platform-guardrails to one commit SHA with
 # the tag in a comment, and passes the same SHA as guardrails_ref so the scripts
 # and policies it checks out match the reviewed workflow. v1.7.0 adds the
-# ephemeral TF_VAR_ci_stage hand-off and has_changes (ADR-0004).
+# ephemeral TF_VAR_ci_stage hand-off and has_changes (ADR-0004); v1.7.1 makes
+# has_changes report correctly (setup-terraform wrapper off).
 permissions:
   contents: read
 
 jobs:
   static:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: terraform
       # No baseline: this repo's static gates are green as-is. Add one only if a
       # future change introduces findings that must be ratcheted down over time:
@@ -30,69 +31,69 @@ jobs:
 
   # The accounts/ root holds the persistent org, OUs, accounts, and SCPs.
   static_accounts:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: accounts
 
   # The bootstrap/ root: CI OIDC roles and the dedicated state backend (ADR-0003).
   static_bootstrap:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: bootstrap
 
   # The network/ root is a separate root module (the timed inspection layer), so
   # it gets its own static gate.
   static_network:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: network
 
   # The workload/ root is the paved-road prod tier (data + EKS), also timed.
   static_workload:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: workload
 
   # The delivery/ root: release-guard's registries, deployment table and release
   # and workload identities. No hourly resources.
   static_delivery:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: delivery
 
   # The observability/ root: finding routing, the OAM monitoring account, and
   # the central alarms.
   static_observability:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: observability
 
   # The compute/ root: the hardened management instance from the golden AMI.
   static_compute:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: compute
 
   # The secrets/ root: metadata-only scan-target roles for the secrets scanner.
   static_secrets:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: secrets
 
   # The incident/ root: per-step forensics target roles in prod, the alarm
   # reader in shared-services, and the responder's private n8n repository.
   static_incident:
-    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: incident
 
   # The FinOps allocation policy (CostCenter) already runs inside `static`, since
@@ -193,13 +194,13 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
       terraform_dir: network
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
       enable_infracost: false
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
 
   plan_workload:
     needs: upstream
@@ -208,13 +209,13 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
       terraform_dir: workload
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
       enable_infracost: false
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
 
   plan_delivery:
     needs: upstream
@@ -223,10 +224,10 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
     with:
       terraform_dir: delivery
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
       enable_infracost: false
-      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
