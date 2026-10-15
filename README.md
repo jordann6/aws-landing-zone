@@ -1,5 +1,13 @@
 # AWS Landing Zone
 
+**Infra pipeline status:** proven live and torn down on 2026-10-15. The network,
+workload and delivery roots now plan on every pull request with a read-only
+member role, apply on merge behind a reviewer-gated environment, replan to prove
+a second plan is empty, and destroy through a gated workflow with a post-destroy
+hourly check. The first live runs caught two real defects, both failed safe. See
+[Infra pipeline](#infra-pipeline) and
+[ADR-0004](docs/adr/0004-gated-infra-pipeline.md).
+
 **Compute baseline status:** deployed, proven and destroyed on 2026-10-06. The
 compute guardrails are live on the Sandbox and Workloads OUs
 (`scripts/test-guardrails.sh` 20/20, dry-run denials in sandbox and prod). In one
@@ -48,10 +56,12 @@ standby uses a cross-region RDS replica.
 ## Proven in live runs
 
 Every layer below was deployed, proven against the real organization, and torn down.
-Results are from saved plans applied by the operator, not from plans alone.
+Results are from applied saved plans, not from plans alone: by the operator for
+the earlier layers, and by CI behind reviewer gates for the infra pipeline.
 
 | Layer | What was proven | Where |
 |---|---|---|
+| Infra pipeline | 196 resources applied through CI across three roots, second plan empty, gated destroy to empty state with the hourly check passing on each root | [ADR-0004](docs/adr/0004-gated-infra-pipeline.md) |
 | Guardrails and compute | 20/20 guardrail denials, hardened golden AMI after reboot, private management instance 17/17 | [compute-baseline](docs/compute-baseline.md) |
 | Secrets scanner | Cross-account scan of all members, positive control flagged, value reads explicitly denied | [secrets-lifecycle](docs/secrets-lifecycle.md) |
 | Incident tooling | Finding to forensics runbook, isolation drill with encrypted evidence, forced alarm to RDS failover in about 35 seconds | [incident-response](docs/incident-response.md) |
@@ -196,11 +206,46 @@ image by design. The golden AMI is for standalone instances; no golden AMI has
 been built yet. No application
 has been deployed to prove the permitted app-to-database path.
 
-## Plan, prove and tear down
+## Infra pipeline
 
-The assistant runs formatting, validation, saved plans and read-only verification.
-The operator reviews and runs applies and destroys. For future demos, the private
-input exporter reads existing account and network state:
+The hourly roots (network, workload, delivery) build and tear down through CI.
+Design and the live proof are in [ADR-0004](docs/adr/0004-gated-infra-pipeline.md).
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `guardrails.yml` | Pull request | Static gates on every root; credentialed plan for network, and for workload and delivery when their upstream state is live, using the read-only member `gha-plan` |
+| `apply.yml` | Push to main on those roots, or dispatch | Only when `HOURLY_STACK_ENABLED` is `true`. network, workload, delivery in order, each replaying its reviewed saved plan behind the `prod-apply` environment; then replans all three and fails if a second plan is not empty |
+| `destroy.yml` | Dispatch, main only | delivery, workload, network, each behind the `destroy` environment and followed by the hourly-resource check |
+| `ttl-guard.yml` | Hourly schedule, or dispatch | Read-only check that fails while network or workload holds anything hourly. Best effort: GitHub may delay or drop scheduled runs |
+
+Bring the stack up and down (reviewer approves each root at its gate):
+
+```bash
+gh variable set HOURLY_STACK_ENABLED --repo jordann6/aws-landing-zone --body true
+gh workflow run apply.yml --repo jordann6/aws-landing-zone --ref main
+# prove, then
+gh workflow run destroy.yml --repo jordann6/aws-landing-zone --ref main
+gh variable set HOURLY_STACK_ENABLED --repo jordann6/aws-landing-zone --body false
+```
+
+The stack costs about $1.16 an hour and the workload apply takes about 28
+minutes. Finish the teardown before 05:00 UTC, when the workload backup plan
+writes into a Vault Lock vault whose recovery points block its deletion for 7
+days. Check that vault for recovery points before dispatching the destroy.
+
+Inputs come from upstream remote state (account ids, Organization ARN, Transit
+Gateway id), so CI needs no var files. The member account role is chosen by an
+ephemeral `ci_stage` variable that platform-guardrails sets per job; unset, it
+falls back to `OrganizationAccountAccessRole`. The account EBS encryption default
+is guarded by a `removed` block, so no `terraform state rm` is needed before a
+destroy.
+
+### Local fallback
+
+An operator can still plan and apply locally with reviewed saved plans.
+`phase-c.tfvars.json` is optional now; an explicitly set variable still wins over
+the state-sourced value. The private input exporter reads existing account and
+network state:
 
 ```bash
 python3 scripts/prepare-workload-inputs.py --workload
@@ -220,7 +265,8 @@ selected live deny behavior. They do not measure RDS failover or prove applicati
 traffic. The state-based `scripts/verify-teardown.sh` is a supplemental check;
 completion requires live inventory checks too, as described in the runbook.
 
-Destroy **workload first, network second**. Do not use general `make destroy` for
+Destroy **delivery, then workload, then network** (the order `destroy.yml`
+uses). Do not use general `make destroy` for
 this completion path because it also removes governance and audit buckets. Retain
 the audit history and observability foundation. An expired compliance lock with
 recovery points can block backup deletion until retention ends. KMS deletion
@@ -259,9 +305,12 @@ cost estimates, and stores each root's report separately. Hosted Infracost
 policy enforcement is disabled because its example tagging rules conflict with
 the organization's tag policy. Pricing estimates still use the Infracost API.
 
-The OIDC plan job and scheduled TTL trigger are currently disabled. Apply and
-destroy workflows are available by manual dispatch; local credentialed applies
-and destroys are run by the operator using reviewed, saved plans.
+The credentialed plan, gated apply, gated destroy and TTL guard are live for the
+network, workload and delivery roots; see [Infra pipeline](#infra-pipeline). CI
+authenticates by GitHub OIDC with the immutable repository subject, into
+management `gha-plan` or `gha-apply`, which each chain into exactly one matching
+role in the member accounts. The accounts, governance, bootstrap and
+observability roots stay operator-applied, so CI can never rewrite its own trust.
 
 ## Documentation
 
@@ -275,5 +324,6 @@ and destroys are run by the operator using reviewed, saved plans.
 - [Access model](docs/access-model.md): personas, account scope and permissions.
 - [Data tier](docs/data-tier.md): segmentation, backup policy and availability design; proof limits are explicit.
 - [State backend decision](docs/adr/0003-dedicated-state-backend.md): dedicated, KMS-encrypted backend instead of the shared bucket.
+- [Gated infra pipeline](docs/adr/0004-gated-infra-pipeline.md): split plan and apply identities across accounts, reviewed-plan replay, second-plan check, the live proof and the two defects it caught.
 - [Architecture decision](docs/accelerator-vs-bespoke.md): bespoke Terraform versus Control Tower and Landing Zone Accelerator.
 - [Diagram source](docs/diagram.py): official AWS icons via the mingrammer `diagrams` library. Regenerate with `python3 docs/diagram.py` after installing `diagrams` and Graphviz.

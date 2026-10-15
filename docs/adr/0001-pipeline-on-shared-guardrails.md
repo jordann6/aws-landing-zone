@@ -48,3 +48,9 @@ immediately. The write path is now bound to a GitHub environment, so an apply
 cannot happen without a reviewer, which is deliberate friction. If the shared
 workflows ever need a change this repo cannot wait for, that is the signal to
 reconsider vendoring them; so far the fleet has not hit that.
+
+**Update 2026-10-15:** the credentialed workflows are no longer inert. The
+bootstrap roles exist, their trust uses the immutable OIDC subject, and the
+network, workload and delivery roots now plan, apply and destroy through CI
+behind reviewer-gated environments. See
+[ADR-0004](0004-gated-infra-pipeline.md) for the design and the live proof.
