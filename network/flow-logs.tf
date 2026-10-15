@@ -23,10 +23,13 @@ resource "aws_iam_role" "flow" {
   assume_role_policy = data.aws_iam_policy_document.flow_assume.json
 }
 
+# No logs:CreateLogGroup. Terraform owns the group. With that permission, flow
+# log delivery still in flight during a destroy re-created /vpc/hub-flow right
+# after Terraform deleted it (2026-10-15 16:58 UTC, no retention, empty), and the
+# next apply failed with ResourceAlreadyExistsException. Matches workload.
 data "aws_iam_policy_document" "flow_write" {
   statement {
     actions = [
-      "logs:CreateLogGroup",
       "logs:CreateLogStream",
       "logs:PutLogEvents",
       "logs:DescribeLogGroups",
