@@ -1,0 +1,24 @@
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
+
+# Consumed from the workload root rather than repeating its resource names.
+data "terraform_remote_state" "workload" {
+  backend = "s3"
+  config = {
+    bucket     = var.state_bucket
+    key        = "aws-landing-zone/workload.tfstate"
+    region     = var.region
+    kms_key_id = "alias/aws-landing-zone-tfstate"
+  }
+}
+
+locals {
+  account   = data.aws_caller_identity.current.account_id
+  partition = data.aws_partition.current.partition
+  workload  = data.terraform_remote_state.workload.outputs
+  name      = "release-guard"
+
+  contract_parameter_arn = "arn:${local.partition}:ssm:${var.region}:${local.account}:parameter/delivery/${local.name}/${var.environment}/contract"
+  eks_issuer             = local.workload.eks_oidc_issuer
+  eks_oidc_provider_arn  = local.workload.eks_oidc_provider_arn
+}

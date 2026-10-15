@@ -51,6 +51,13 @@ jobs:
     with:
       terraform_dir: workload
 
+  # The delivery/ root: release-guard's registries, deployment table and release
+  # and workload identities. No hourly resources.
+  static_delivery:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@v1.4.0
+    with:
+      terraform_dir: delivery
+
   # The observability/ root: finding routing, the OAM monitoring account, and
   # the central alarms.
   static_observability:
@@ -89,6 +96,17 @@ jobs:
       pull-requests: write
     with:
       terraform_dir: workload
+      max_monthly_increase: "50"
+    secrets:
+      INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+
+  finops_delivery:
+    uses: ./.github/workflows/finops-gate.yml
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      terraform_dir: delivery
       max_monthly_increase: "50"
     secrets:
       INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}

@@ -1,0 +1,13 @@
+generation_id
+region
+cluster_name
+namespace
+app_repository_url
+deploy_repository_url
+publish_role_arn
+promote_role_arn
+app_role_arn
+migrator_role_arn
+verifier_role_arn
+flux_source_role_arn
+deployment_table

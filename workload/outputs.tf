@@ -33,6 +33,16 @@ output "eks_cluster_endpoint" {
   value       = var.enable_eks ? aws_eks_cluster.prod[0].endpoint : null
 }
 
+output "eks_oidc_issuer" {
+  description = "EKS OIDC issuer without the scheme, for IRSA trust conditions"
+  value       = var.enable_eks ? replace(aws_eks_cluster.prod[0].identity[0].oidc[0].issuer, "https://", "") : null
+}
+
+output "db_resource_id" {
+  description = "RDS DbiResourceId, used in rds-db:connect ARNs for IAM database authentication"
+  value       = var.enable_rds ? aws_db_instance.prod[0].resource_id : null
+}
+
 output "eks_oidc_provider_arn" {
   value = var.enable_eks ? aws_iam_openid_connect_provider.eks[0].arn : null
 }
