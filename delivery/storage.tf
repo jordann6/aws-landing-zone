@@ -57,6 +57,7 @@ locals {
     verifier               = "${local.name}/verifier"
     flux-source-controller = "flux/source-controller"
     flux-kustomize         = "flux/kustomize-controller"
+    tools-postgres         = "tools/postgres" # psql for the one-time database bootstrap Job
   }
 }
 

@@ -58,6 +58,10 @@ output "verifier_repository_url" {
   value = aws_ecr_repository.this["verifier"].repository_url
 }
 
+output "postgres_tools_repository_url" {
+  value = aws_ecr_repository.this["tools-postgres"].repository_url
+}
+
 output "flux_mirror_repository_urls" {
   value = {
     source_controller    = aws_ecr_repository.this["flux-source-controller"].repository_url
