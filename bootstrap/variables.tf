@@ -16,6 +16,21 @@ variable "github_repo" {
   default     = "aws-landing-zone"
 }
 
+# The repo emits immutable OIDC subjects (gh api repos/OWNER/REPO/actions/oidc/customization/sub
+# reports use_immutable_subject), so the trust policies match owner and repo ids too.
+# A renamed or re-created repository therefore cannot inherit these roles.
+variable "github_org_id" {
+  description = "Numeric id of github_org, as it appears in the immutable OIDC subject"
+  type        = string
+  default     = "196278615"
+}
+
+variable "github_repo_id" {
+  description = "Numeric id of github_repo, as it appears in the immutable OIDC subject"
+  type        = string
+  default     = "1285534963"
+}
+
 variable "state_bucket" {
   description = "Dedicated S3 bucket holding this repo's Terraform state, created by state_backend.tf (ADR-0003). No account id in the name."
   type        = string

@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.10.0"
 
   required_providers {
     aws = {
@@ -30,7 +30,7 @@ provider "aws" {
   region = var.region
 
   assume_role {
-    role_arn = "arn:aws:iam::${var.prod_account_id}:role/OrganizationAccountAccessRole"
+    role_arn = "arn:aws:iam::${local.prod_account_id}:role/${local.member_role_name}"
   }
 
   default_tags {

@@ -42,3 +42,43 @@ provider "aws" {
     }
   }
 }
+
+# Member accounts, for the per-account CI roles (member-roles.tf). bootstrap is
+# applied by the operator only, so these use the break-glass org access role.
+provider "aws" {
+  alias  = "network"
+  region = var.region
+
+  assume_role {
+    role_arn = "arn:aws:iam::${local.member_accounts.network}:role/OrganizationAccountAccessRole"
+  }
+
+  default_tags {
+    tags = {
+      Project     = "aws-landing-zone"
+      Environment = "network"
+      Owner       = "jordan"
+      ManagedBy   = "terraform"
+      CostCenter  = "cc-0001"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "prod"
+  region = var.region
+
+  assume_role {
+    role_arn = "arn:aws:iam::${local.member_accounts.prod}:role/OrganizationAccountAccessRole"
+  }
+
+  default_tags {
+    tags = {
+      Project     = "aws-landing-zone"
+      Environment = "prod"
+      Owner       = "jordan"
+      ManagedBy   = "terraform"
+      CostCenter  = "cc-0001"
+    }
+  }
+}

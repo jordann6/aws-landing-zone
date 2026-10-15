@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.10.0"
 
   required_providers {
     aws = {
@@ -21,13 +21,13 @@ terraform {
   }
 }
 
-# Assumes into the network account. The account id comes from the governance
-# root's `network_account_id` output; make deploy wires it in.
+# Assumes into the network account. The account id comes from the persistent
+# accounts state; the role comes from the CI stage (ci.tf).
 provider "aws" {
   region = var.region
 
   assume_role {
-    role_arn = "arn:aws:iam::${data.terraform_remote_state.accounts.outputs.network_account_id}:role/OrganizationAccountAccessRole"
+    role_arn = "arn:aws:iam::${data.terraform_remote_state.accounts.outputs.network_account_id}:role/${local.member_role_name}"
   }
 
   default_tags {
@@ -56,8 +56,13 @@ data "terraform_remote_state" "accounts" {
       error_message = "Apply the persistent accounts RAM-sharing prerequisite before planning the hourly network layer."
     }
     postcondition {
-      condition     = self.outputs.network_account_id == var.network_account_id
+      condition     = var.network_account_id == null || self.outputs.network_account_id == var.network_account_id
       error_message = "The network account input must match the persistent account state."
     }
   }
+}
+
+locals {
+  # null reads the Organization from the accounts state; "" skips the RAM share.
+  org_arn = var.org_arn == null ? data.terraform_remote_state.accounts.outputs.organization_arn : var.org_arn
 }

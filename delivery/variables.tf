@@ -7,22 +7,25 @@ variable "region" {
 variable "owner" {
   description = "Owner tag"
   type        = string
+  default     = "jordan"
 }
 
 variable "cost_center" {
   description = "CostCenter tag (cc-NNNN)"
   type        = string
+  default     = "cc-0001"
 }
 
 variable "prod_account_id" {
-  description = "Prod workload account ID"
+  description = "Prod workload account ID. null (the default) reads prod_account_id from the accounts state."
   type        = string
+  default     = null
 }
 
 variable "github_repository" {
-  description = "Repository whose workflows may assume the release roles"
+  description = "Repository whose workflows may assume the release roles, in the immutable OIDC subject form owner@id/repo@id (release-guard emits immutable subjects)"
   type        = string
-  default     = "jordann6/release-guard"
+  default     = "jordann6@196278615/release-guard@1420344268"
 }
 
 variable "environment" {
