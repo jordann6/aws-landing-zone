@@ -1,5 +1,11 @@
 locals {
-  sub_prefix    = "repo:${var.github_org}/${var.github_repo}"
+  # The repository emits immutable OIDC subjects (owner and repo carry their
+  # numeric ids), so the plain "repo:owner/name" form never matches.
+  sub_prefix = "repo:${var.github_org}@${var.github_org_id}/${var.github_repo}@${var.github_repo_id}"
+  member_role_arns = {
+    plan  = [for id in values(local.member_accounts) : "arn:aws:iam::${id}:role/gha-plan"]
+    apply = [for id in values(local.member_accounts) : "arn:aws:iam::${id}:role/gha-apply"]
+  }
   state_bucket  = "arn:aws:s3:::${var.state_bucket}"
   state_objects = "arn:aws:s3:::${var.state_bucket}/${var.state_key_prefix}/*"
   legacy_states = var.legacy_state_bucket == "" ? [] : [{
@@ -106,6 +112,11 @@ data "aws_iam_policy_document" "plan_permissions" {
     actions   = ["sts:GetCallerIdentity"]
     resources = ["*"]
   }
+  statement {
+    sid       = "ChainToMemberPlanRoles"
+    actions   = ["sts:AssumeRole"]
+    resources = local.member_role_arns.plan
+  }
 }
 
 resource "aws_iam_role" "gha_plan" {
@@ -178,6 +189,11 @@ data "aws_iam_policy_document" "apply_permissions" {
     sid       = "ReadIdentity"
     actions   = ["sts:GetCallerIdentity"]
     resources = ["*"]
+  }
+  statement {
+    sid       = "ChainToMemberApplyRoles"
+    actions   = ["sts:AssumeRole"]
+    resources = local.member_role_arns.apply
   }
 }
 

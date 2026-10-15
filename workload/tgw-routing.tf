@@ -3,7 +3,7 @@ data "aws_ec2_transit_gateway_route_table" "spoke" {
   provider = aws.network
   filter {
     name   = "transit-gateway-id"
-    values = [var.transit_gateway_id]
+    values = [local.transit_gateway_id]
   }
   filter {
     name   = "tag:Name"
@@ -16,7 +16,7 @@ data "aws_ec2_transit_gateway_route_table" "inspection" {
   provider = aws.network
   filter {
     name   = "transit-gateway-id"
-    values = [var.transit_gateway_id]
+    values = [local.transit_gateway_id]
   }
   filter {
     name   = "tag:Name"

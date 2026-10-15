@@ -52,7 +52,7 @@ resource "aws_subnet" "this" {
 # account (auto-accept is off on the TGW by design).
 resource "aws_ec2_transit_gateway_vpc_attachment" "prod" {
   count              = var.enable_tgw ? 1 : 0
-  transit_gateway_id = var.transit_gateway_id
+  transit_gateway_id = local.transit_gateway_id
   vpc_id             = aws_vpc.prod.id
   subnet_ids         = local.tgw_subnet_ids
 
@@ -82,7 +82,7 @@ resource "aws_route" "private_default" {
   count                  = var.enable_tgw ? 1 : 0
   route_table_id         = aws_route_table.private.id
   destination_cidr_block = "0.0.0.0/0"
-  transit_gateway_id     = var.transit_gateway_id
+  transit_gateway_id     = local.transit_gateway_id
 
   depends_on = [aws_ec2_transit_gateway_vpc_attachment_accepter.prod]
 }

@@ -1,37 +1,147 @@
 name: Apply (gated)
 
-# Reviewer-gated apply: the just-in-time-to-prod control in CI. Plans read-only,
-# runs the destroy guard, then pauses on the `prod-apply` environment for a
-# required reviewer before applying the exact saved plan with a write-scoped
-# role. See tf-apply.yml in platform-guardrails.
+# Reviewer-gated apply for the hourly roots (ADR-0004), in dependency order:
+# network, then workload (reads network state), then delivery (reads workload
+# state). For each root, tf-apply plans read-only with gha-plan, runs the destroy
+# guard, saves the plan, then pauses on the `prod-apply` environment and replays
+# that exact saved plan with the write-scoped gha-apply role. An empty plan skips
+# the gated job, so nobody is asked to approve a no-op.
 #
-# INACTIVE until Phase-1 activation:
-#   1. bootstrap roles applied (gha-plan, gha-apply)
-#   2. platform-guardrails v1.4.0 pushed
-#   3. a `prod-apply` GitHub environment with a required reviewer
-#   4. 692859913278 replaced below (bootstrap outputs)
-#   5. add the real trigger (push to main) and remove this notice
+# After the last apply, every root is planned again and must come back empty.
+# A second plan with changes means a perpetual diff (a provider normalising a
+# value the config keeps resetting), and that fails the run the day it appears.
 #
-# Kept on workflow_dispatch only for now so it never auto-fires before the roles
-# exist. A manual dispatch with placeholder ARNs fails cleanly, which is fine.
+# HOURLY_STACK_ENABLED (repo variable) is the desired state of the hourly stack.
+# While it is not "true", a merge never pages a reviewer to build ~$1.16/hour of
+# infrastructure. To bring the stack up: set it to true, then dispatch this
+# workflow on main. To take it down: run destroy.yml, then set it to false.
+#
+# The governance root (terraform/) and the persistent roots (accounts/,
+# bootstrap/, observability/) stay operator-applied; see ADR-0004.
 on:
+  push:
+    branches: [main]
+    paths:
+      - network/**
+      - workload/**
+      - delivery/**
   workflow_dispatch:
-  # ACTIVATE: apply on merge to main.
-  # push:
-  #   branches: [main]
+
+# Apply and destroy never interleave, and a queued run waits instead of
+# cancelling one that is mid-apply.
+concurrency:
+  group: aws-landing-zone-hourly-stack
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  apply:
+  network:
+    if: vars.HOURLY_STACK_ENABLED == 'true' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@v1.4.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
     with:
-      terraform_dir: terraform
+      terraform_dir: network
       environment: prod-apply
       plan_role_arn: arn:aws:iam::692859913278:role/gha-plan
       apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
+      skip_apply_when_unchanged: true
+      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+
+  workload:
+    needs: network
+    permissions:
+      contents: read
+      id-token: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    with:
+      terraform_dir: workload
+      environment: prod-apply
+      plan_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
+      aws_region: us-east-1
+      skip_apply_when_unchanged: true
+      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+
+  # The deployment contract is not published here: release-guard reads it from
+  # SSM in the prod account, and these jobs hold management-account credentials.
+  # Publishing stays an operator step while DELIVERY_ENABLED is false (ADR-0004).
+  delivery:
+    needs: workload
+    permissions:
+      contents: read
+      id-token: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    with:
+      terraform_dir: delivery
+      environment: prod-apply
+      plan_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
+      aws_region: us-east-1
+      skip_apply_when_unchanged: true
+      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+
+  # ---- Second plan: must be empty ----------------------------------------------
+  replan_network:
+    needs: delivery
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    with:
+      terraform_dir: network
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      aws_region: us-east-1
+      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+
+  replan_workload:
+    needs: delivery
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    with:
+      terraform_dir: workload
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      aws_region: us-east-1
+      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+
+  replan_delivery:
+    needs: delivery
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    with:
+      terraform_dir: delivery
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      aws_region: us-east-1
+      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+
+  no_drift:
+    name: Second plan is empty
+    needs: [replan_network, replan_workload, replan_delivery]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          NETWORK: ${{ needs.replan_network.outputs.has_changes }}
+          WORKLOAD: ${{ needs.replan_workload.outputs.has_changes }}
+          DELIVERY: ${{ needs.replan_delivery.outputs.has_changes }}
+        run: |
+          status=0
+          for pair in "network=$NETWORK" "workload=$WORKLOAD" "delivery=$DELIVERY"; do
+            root=${pair%%=*}; changes=${pair#*=}
+            echo "$root: has_changes=$changes" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$changes" != "false" ]; then
+              echo "::error::$root planned changes right after its apply: a perpetual diff, or drift. See the replan_$root job summary."
+              status=1
+            fi
+          done
+          exit $status

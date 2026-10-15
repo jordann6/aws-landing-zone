@@ -26,20 +26,22 @@ variable "cost_center" {
   default = "cc-0001"
 }
 
-# Wired from the governance and network root outputs by make deploy.
+# Read from the accounts and network state (upstream.tf). Setting one overrides it.
 variable "prod_account_id" {
-  description = "Prod workload account id (governance output prod_account_id)"
+  description = "Prod workload account id. null (the default) reads prod_account_id from the accounts state."
   type        = string
+  default     = null
 }
 
 variable "network_account_id" {
-  description = "Network account id (governance output network_account_id)"
+  description = "Network account id. null (the default) reads network_account_id from the accounts state."
   type        = string
+  default     = null
 }
 
 variable "transit_gateway_id" {
   default     = null
-  description = "Hub Transit Gateway id (network output transit_gateway_id)"
+  description = "Hub Transit Gateway id. null (the default) reads transit_gateway_id from the network state."
   type        = string
 }
 
@@ -120,10 +122,7 @@ variable "enable_tgw" {
   description = "Enable hub attachments and routes only when the hourly network root exists."
   type        = bool
   default     = true
-  validation {
-    condition     = !var.enable_tgw || var.transit_gateway_id != null
-    error_message = "enable_tgw requires a live transit_gateway_id."
-  }
+  # Checked against the network state in upstream.tf, since the id now comes from there.
 }
 
 # ---- compute baseline ---------------------------------------------------------

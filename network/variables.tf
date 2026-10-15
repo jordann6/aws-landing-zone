@@ -5,8 +5,9 @@ variable "region" {
 }
 
 variable "network_account_id" {
-  description = "Network account id (from the governance root's network_account_id output)"
+  description = "Optional cross-check: when set, it must equal network_account_id in the accounts state, which is the source of truth"
   type        = string
+  default     = null
 }
 
 variable "owner" {
@@ -55,7 +56,7 @@ variable "flow_log_retention_days" {
 }
 
 variable "org_arn" {
-  description = "Organization ARN to share the TGW with via RAM (from the governance root). Empty skips the share."
+  description = "Organization ARN to share the TGW with via RAM. null (the default) reads it from the accounts state; an empty string skips the share."
   type        = string
-  default     = ""
+  default     = null
 }

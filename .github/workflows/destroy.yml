@@ -1,33 +1,71 @@
-name: Destroy (manual teardown)
+name: Destroy (gated teardown)
 
-# Manual teardown: terraform destroy, then a post-destroy check that fails if any
-# hourly-billed resource survived (the section-8 teardown verification). Gated by
-# the `destroy` environment so a teardown is a recorded, approved act.
+# Reviewer-gated teardown of the hourly roots (ADR-0004), in reverse dependency
+# order: delivery, then workload, then network, each paused on the `destroy`
+# environment. After each destroy, tf-destroy re-reads that root's state and
+# fails if any hourly-billed resource survived (scripts/hourly-guard.sh), so a
+# teardown is not "done" until nothing billable is left.
 #
-# This destroys the governance root only. The org, OUs, member accounts, and SCPs
-# live in the persistent accounts/ root, which no workflow destroys, so every
-# account stays ACTIVE (none left SUSPENDED holding quota and email aliases).
+# Nothing here touches the persistent roots: accounts/ (the Organization, OUs,
+# member accounts and SCPs), bootstrap/, observability/ and the governance root.
+# No member account is ever closed or suspended.
 #
-# INACTIVE until Phase-1 activation:
-#   1. bootstrap role applied (gha-apply, which has destroy rights)
-#   2. platform-guardrails v1.4.0 pushed
-#   3. a `destroy` GitHub environment with a required reviewer
-#   4. 692859913278 replaced below
+# The account's EBS encryption default is never destroyed: the workload root
+# carries a `removed { lifecycle { destroy = false } }` block for it instead of
+# the old manual `terraform state rm`.
+#
+# After a clean run, set HOURLY_STACK_ENABLED to false.
 on:
   workflow_dispatch:
+
+concurrency:
+  group: aws-landing-zone-hourly-stack
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  destroy:
+  delivery:
+    # The destroy environment hands out the write role, so only main's reviewed
+    # code may be dispatched into it.
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@v1.4.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
     with:
-      terraform_dir: terraform
+      terraform_dir: delivery
       environment: destroy
       aws_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       check_only: false
+      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+
+  workload:
+    needs: delivery
+    permissions:
+      contents: read
+      id-token: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    with:
+      terraform_dir: workload
+      environment: destroy
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-apply
+      aws_region: us-east-1
+      check_only: false
+      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139
+
+  network:
+    needs: workload
+    permissions:
+      contents: read
+      id-token: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@2575e92a51b799e332826510cc0e7c0742020139 # v1.7.0
+    with:
+      terraform_dir: network
+      environment: destroy
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-apply
+      aws_region: us-east-1
+      check_only: false
+      guardrails_ref: 2575e92a51b799e332826510cc0e7c0742020139

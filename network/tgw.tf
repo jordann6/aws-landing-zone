@@ -39,8 +39,8 @@ resource "aws_ram_resource_association" "tgw" {
 }
 
 resource "aws_ram_principal_association" "org" {
-  count = var.org_arn != "" ? 1 : 0
+  count = local.org_arn != "" ? 1 : 0
 
-  principal          = var.org_arn
+  principal          = local.org_arn
   resource_share_arn = aws_ram_resource_share.tgw.arn
 }
