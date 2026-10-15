@@ -49,6 +49,19 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.app.id]
   }
 
+  # EKS pods (the orders service and its migration Job) run on nodes in the cluster
+  # security group that EKS creates. Same port, nothing else.
+  dynamic "ingress" {
+    for_each = var.enable_eks ? [1] : []
+    content {
+      description     = "PostgreSQL from EKS pods"
+      from_port       = local.db_port
+      to_port         = local.db_port
+      protocol        = "tcp"
+      security_groups = [aws_eks_cluster.prod[0].vpc_config[0].cluster_security_group_id]
+    }
+  }
+
   egress {
     description = "Responses to the app tier"
     from_port   = 0
