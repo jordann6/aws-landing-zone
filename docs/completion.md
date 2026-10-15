@@ -69,7 +69,12 @@ live teardown verification does not establish a zero invoice. Recheck billing
 once reporting catches up.
 
 For future demos, state the projected hourly cost, deploy through reviewed saved
-plans, record proof and tear down workload before network. Do not use general
+plans, record proof and tear down delivery, then workload, then network. The
+default path is now CI: set `HOURLY_STACK_ENABLED` to `true`, approve each root
+in `apply.yml`, dispatch `destroy.yml` and approve each root, then set the
+variable back to `false` (README, [Infra pipeline](../README.md#infra-pipeline);
+[ADR-0004](adr/0004-gated-infra-pipeline.md) has the 2026-10-15 live proof). The
+local path with `phase-c.tfvars.json` remains a fallback. Do not use general
 `make destroy` for this completion path, since it also removes governance. Never
 close or suspend member accounts. Preserve audit history, observability and RAM
 organization onboarding.

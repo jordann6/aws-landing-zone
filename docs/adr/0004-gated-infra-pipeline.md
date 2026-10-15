@@ -1,7 +1,8 @@
 # ADR-0004: A gated CI pipeline for the hourly roots
 
-- **Status:** proposed
-- **Date:** 2026-10-15
+- **Status:** accepted
+- **Date:** 2026-10-15 (proposed and accepted the same day, after the live proof
+  below)
 
 ## Context
 
@@ -86,12 +87,59 @@ Supporting decisions:
    artifact and the gated job replays that file. The ephemeral stage variable is
    what makes this work across accounts.
 3. **Gated destroy with a post-destroy hourly check**, plus an hourly TTL guard
-   that alarms while anything billable stands. He never mentioned teardown.
+   that alarms while anything billable stands. He never mentioned teardown. The
+   TTL guard is a backstop, not the control: see the live proof below.
 4. **Cost gate on PRs.** Infracost fails a PR that adds more than $50 a month to a
    root unless it is labelled `cost-approved`.
 5. **Second plan must be empty.** After the apply, every root is planned again and
    the run fails if anything would change. That catches a perpetual diff (the
    uppercase-label question at 29:55) on the day it is introduced.
+
+## Live proof (2026-10-15)
+
+The full network, workload and delivery stack was built, replanned and destroyed
+through CI, with every gate approved by the reviewer.
+
+| Step | Run | Result |
+| ---- | --- | ------ |
+| PR plan, network, member read-only role | [38814376834](https://github.com/jordann6/aws-landing-zone/actions/runs/38814376834) | 50 to add, `ci_stage=plan`, guardrails at v1.7.0 |
+| First apply on merge | [38816177507](https://github.com/jordann6/aws-landing-zone/actions/runs/38816177507) | Defect 1 (below): every apply skipped, nothing built, failed safe |
+| First dispatched apply | [38817053686](https://github.com/jordann6/aws-landing-zone/actions/runs/38817053686) | Defect 2 (below): 47 of 50 network resources created, then `ResourceAlreadyExistsException` |
+| PR plan, network and workload | [38818372823](https://github.com/jordann6/aws-landing-zone/actions/runs/38818372823) | network 3 to add; workload 116 to add, Transit Gateway id read from network state |
+| Gated apply on merge of #24 | [38819114516](https://github.com/jordann6/aws-landing-zone/actions/runs/38819114516) | network 3 added (18s), workload 116 added (28m00s: EKS 12m56s, RDS 14m27s), delivery 30 added (45s), three replans, **Second plan is empty: passed** |
+| Gated destroy | [38823023368](https://github.com/jordann6/aws-landing-zone/actions/runs/38823023368) | delivery 28s, workload 15m05s, network 4m52s; post-destroy hourly check passed on each |
+| TTL guard, after teardown | [38825882685](https://github.com/jordann6/aws-landing-zone/actions/runs/38825882685) | network and workload state empty, green |
+
+After the destroy, `terraform state list` was empty for all three roots and the
+v1.7.1 hourly guard exited 0 on each. A live sweep of both member accounts found
+no VPC, NAT gateway, Elastic IP, Transit Gateway, firewall, endpoint, instance,
+volume, EKS cluster, RDS instance, load balancer, backup vault or customer KMS
+key, and no `/vpc/` log group in either account. The prod backup vault held 0
+recovery points before the destroy, which finished more than five hours ahead of
+the 05:00 UTC backup window. The hourly stack billed for about 1 hour 15 minutes.
+
+Two real defects surfaced on the first live runs, and both failed safe:
+
+1. **The setup-terraform wrapper hid `-detailed-exitcode`.** The wrapper (on by
+   default) reports exit code 2 as 0, so v1.7.0's `has_changes` was always false
+   and every gated apply was skipped. Network planned 50 and applied nothing;
+   workload then failed on an empty network state. platform-guardrails v1.7.1
+   turns the wrapper off in the plan steps and adds a self-test that asserts codes
+   2 and 0 come through (#23 pins it here).
+2. **The hub flow-log role re-created its own log group after a destroy.** Flow
+   Logs delivery kept writing after that day's manual teardown and, holding
+   `logs:CreateLogGroup`, re-created `/vpc/hub-flow` outside Terraform. The next
+   apply hit `ResourceAlreadyExistsException` with 47 of 50 resources built. #24
+   drops `logs:CreateLogGroup` from the role; the empty stray group was deleted.
+   After the CI destroy above, `/vpc/hub-flow` did not reappear.
+
+One assumption did not hold: the TTL guard (cron `17 * * * *`) never fired on
+schedule while the stack was up. GitHub delays or drops scheduled runs,
+especially for newly added workflows, so an hourly alarm that depends on the
+GitHub scheduler is best effort. The gated destroy and its post-destroy check
+are the control that protected the spend. An AWS-side backstop (a Budgets action
+or an EventBridge schedule in the management account) is the follow-up if the
+stack is ever left up unattended.
 
 ## Alternatives rejected
 
@@ -118,15 +166,15 @@ Supporting decisions:
   `aws_ssm_parameter` in the delivery root.
 - A role-chained session lasts at most one hour, so an apply or destroy of one
   root must finish inside it. The workload root (EKS, its node group and RDS) is
-  the longest; the first CI run records its duration. Revisit if a root ever
-  approaches the limit.
+  the longest: 28 minutes to apply and 15 to destroy in the live proof. Revisit
+  if a root ever approaches the limit.
 - The workload backup plan runs daily at 05:00 UTC into a Vault Lock vault with a
   7-day minimum retention. A stack still up at that hour gets a recovery point the
   destroy cannot remove, so a CI bring-up and teardown should finish before then.
 - The governance root and the persistent roots (accounts/, bootstrap/,
   observability/) stay operator-applied. bootstrap in particular holds the CI
   identities, so CI must never be able to rewrite its own trust.
-- main has no ruleset requiring these checks, and neither environment restricts
-  deployment branches. The workflows refuse non-main refs, and gha-plan trusts
-  only main and pull requests, but the environment branch policy and a required
-  check ruleset are the durable versions of that control.
+- Both environments (`prod-apply`, `destroy`) now accept deployments from `main`
+  only, on top of the workflows refusing non-main refs and gha-plan trusting only
+  main and pull requests. main still has no ruleset requiring the static and plan
+  checks; that is the remaining durable version of the control.
