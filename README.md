@@ -61,7 +61,7 @@ the earlier layers, and by CI behind reviewer gates for the infra pipeline.
 
 | Layer | What was proven | Where |
 |---|---|---|
-| Infra pipeline | 196 resources applied through CI across three roots, second plan empty, gated destroy to empty state with the hourly check passing on each root | [ADR-0004](docs/adr/0004-gated-infra-pipeline.md) |
+| Infra pipeline | 196 resources applied through CI across three roots (network 50, workload 116, delivery 30) over two runs, the first stopping safely at 47 of 50 network resources on a defect; second plan empty, gated destroy to empty state with the hourly check passing on each root | [ADR-0004](docs/adr/0004-gated-infra-pipeline.md) |
 | Guardrails and compute | 20/20 guardrail denials, hardened golden AMI after reboot, private management instance 17/17 | [compute-baseline](docs/compute-baseline.md) |
 | Secrets scanner | Cross-account scan of all members, positive control flagged, value reads explicitly denied | [secrets-lifecycle](docs/secrets-lifecycle.md) |
 | Incident tooling | Finding to forensics runbook, isolation drill with encrypted evidence, forced alarm to RDS failover in about 35 seconds | [incident-response](docs/incident-response.md) |

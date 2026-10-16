@@ -110,6 +110,10 @@ through CI, with every gate approved by the reviewer.
 | Gated destroy | [38823023368](https://github.com/jordann6/aws-landing-zone/actions/runs/38823023368) | delivery 28s, workload 15m05s, network 4m52s; post-destroy hourly check passed on each |
 | TTL guard, after teardown | [38825882685](https://github.com/jordann6/aws-landing-zone/actions/runs/38825882685) | network and workload state empty, green |
 
+In total CI created 196 resources: network 50 (47 in the first dispatched apply,
+which stayed in state, plus the last 3 in the gated apply), workload 116 and
+delivery 30. The gated apply on its own added 149.
+
 After the destroy, `terraform state list` was empty for all three roots and the
 v1.7.1 hourly guard exited 0 on each. A live sweep of both member accounts found
 no VPC, NAT gateway, Elastic IP, Transit Gateway, firewall, endpoint, instance,
