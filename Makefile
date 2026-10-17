@@ -7,6 +7,9 @@ TF_COMP ?= compute
 TF_SEC ?= secrets
 TF_INC ?= incident
 TF_STBY ?= standby
+TF_UP ?= uptime
+TF_BKV ?= backup-verify
+TF_REM ?= remediation
 
 .PHONY: help
 help: ## Show this help
@@ -26,6 +29,13 @@ fmt: ## Terraform format check, all roots
 	terraform -chdir=$(TF_SEC) fmt -check -recursive
 	terraform -chdir=$(TF_INC) fmt -check -recursive
 	terraform -chdir=$(TF_STBY) fmt -check -recursive
+	terraform -chdir=$(TF_UP) fmt -check -recursive
+	terraform -chdir=$(TF_BKV) fmt -check -recursive
+	terraform -chdir=$(TF_REM) fmt -check -recursive
+
+.PHONY: test-standing
+test-standing: ## Behavior tests for the standing roots' Lambdas (credential-free)
+	python3 -m pytest $(TF_UP)/tests $(TF_BKV)/tests $(TF_REM)/tests -q
 
 .PHONY: validate
 validate: ## Terraform validate, all roots
@@ -38,6 +48,9 @@ validate: ## Terraform validate, all roots
 	terraform -chdir=$(TF_SEC) init -backend=false && terraform -chdir=$(TF_SEC) validate
 	terraform -chdir=$(TF_INC) init -backend=false && terraform -chdir=$(TF_INC) validate
 	terraform -chdir=$(TF_STBY) init -backend=false && terraform -chdir=$(TF_STBY) validate
+	terraform -chdir=$(TF_UP) init -backend=false && terraform -chdir=$(TF_UP) validate
+	terraform -chdir=$(TF_BKV) init -backend=false && terraform -chdir=$(TF_BKV) validate
+	terraform -chdir=$(TF_REM) init -backend=false && terraform -chdir=$(TF_REM) validate
 
 .PHONY: diagram
 diagram: ## Regenerate docs/architecture.png

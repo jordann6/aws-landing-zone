@@ -38,3 +38,8 @@ HANDOFF.md
 
 # standby proof build artifacts
 standby/build/
+
+# Lambda packages built by archive_file at plan time
+uptime/*.zip
+backup-verify/*.zip
+remediation/*.zip
