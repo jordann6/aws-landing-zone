@@ -1,6 +1,6 @@
 # ADR-0005: Safety model for automatic remediation
 
-- **Status:** proposed (implemented and unit tested; not deployed, so not accepted)
+- **Status:** proposed (implemented, unit tested and deployed with dry_run on; the live proof is not done, so not accepted)
 - **Date:** 2026-10-16
 
 ## Context

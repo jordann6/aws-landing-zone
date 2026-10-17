@@ -273,21 +273,21 @@ data "archive_file" "checker" {
 }
 
 resource "aws_lambda_function" "checker" {
+  #checkov:skip=CKV_AWS_115:The account Lambda concurrency quota is 10, and a reservation would drop unreserved concurrency below the minimum of 10. Duplicate runs are made harmless in code instead.
   #checkov:skip=CKV_AWS_117:The function only calls AWS APIs and holds no data; a VPC adds NAT cost for no isolation gain.
   #checkov:skip=CKV_AWS_116:A failed daily run surfaces as missing data on the freshness alarm; a DLQ adds nothing.
   #checkov:skip=CKV_AWS_272:Code signing adds a signing pipeline for one 40-line function in a sandbox-scale account.
   provider = aws.monitoring
 
-  function_name                  = local.name
-  role                           = aws_iam_role.checker.arn
-  runtime                        = "python3.13"
-  handler                        = "backup_check.lambda_handler"
-  filename                       = data.archive_file.checker.output_path
-  source_code_hash               = data.archive_file.checker.output_base64sha256
-  timeout                        = 60
-  memory_size                    = 128
-  reserved_concurrent_executions = 1
-  kms_key_arn                    = aws_kms_key.backup.arn
+  function_name    = local.name
+  role             = aws_iam_role.checker.arn
+  runtime          = "python3.13"
+  handler          = "backup_check.lambda_handler"
+  filename         = data.archive_file.checker.output_path
+  source_code_hash = data.archive_file.checker.output_base64sha256
+  timeout          = 60
+  memory_size      = 128
+  kms_key_arn      = aws_kms_key.backup.arn
 
   tracing_config {
     mode = "Active"

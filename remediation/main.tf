@@ -245,21 +245,21 @@ data "archive_file" "lambda" {
 }
 
 resource "aws_lambda_function" "remediation" {
+  #checkov:skip=CKV_AWS_115:The account Lambda concurrency quota is 10, and a reservation would drop unreserved concurrency below the minimum of 10. Duplicate runs are made harmless in code instead.
   #checkov:skip=CKV_AWS_117:The function only calls AWS APIs and holds no data; a VPC adds NAT cost for no isolation gain.
   #checkov:skip=CKV_AWS_116:Failures notify the on-call topic and re-fire on the next alarm evaluation; a DLQ adds nothing.
   #checkov:skip=CKV_AWS_272:Code signing adds a signing pipeline for one function in a sandbox-scale account.
   provider = aws.prod
 
-  function_name                  = local.function
-  role                           = aws_iam_role.lambda.arn
-  runtime                        = "python3.13"
-  handler                        = "remediation.lambda_handler"
-  filename                       = data.archive_file.lambda.output_path
-  source_code_hash               = data.archive_file.lambda.output_base64sha256
-  timeout                        = 30
-  memory_size                    = 128
-  reserved_concurrent_executions = 1
-  kms_key_arn                    = aws_kms_key.remediation.arn
+  function_name    = local.function
+  role             = aws_iam_role.lambda.arn
+  runtime          = "python3.13"
+  handler          = "remediation.lambda_handler"
+  filename         = data.archive_file.lambda.output_path
+  source_code_hash = data.archive_file.lambda.output_base64sha256
+  timeout          = 30
+  memory_size      = 128
+  kms_key_arn      = aws_kms_key.remediation.arn
 
   tracing_config {
     mode = "Active"

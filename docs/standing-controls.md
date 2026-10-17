@@ -1,8 +1,26 @@
 # Standing controls: uptime, backup freshness, remediation
 
-Three small roots that stay deployed. Status: **merged and statically validated
-only. Not yet deployed or demonstrated.** Nothing here has been applied, so no
-result below is a live result.
+Three small roots that stay deployed. Status: **deployed on 2026-10-16 and smoke
+checked. The live proofs below are not done.** Each root was applied from a saved
+plan and its second plan came back empty. The smoke checks were one safe
+invocation per Lambda and a read of the bucket settings, not a demonstration of
+any control working under failure.
+
+What the smoke checks showed:
+
+- `uptime/`: one invocation reported the site healthy (HTTP 200, 374 ms, 115 days
+  of certificate left). The site-down alarm sat in ALARM for the first minutes
+  because missing data counts as breaching, then cleared to OK after two checks.
+- `backup-verify/`: one invocation reported an empty bucket (0 objects, age 9999).
+  The bucket is private (all four public-access blocks on), versioned and
+  KMS-encrypted, and `terraform plan -destroy` refuses to remove it.
+- `remediation/`: a malformed event was skipped with no action. The state table is
+  empty and both email subscriptions are pending confirmation.
+
+One defect only a live apply could find: the account's Lambda concurrency quota is
+10, so reserving one execution per function failed (AWS requires 10 unreserved).
+The reservation was removed from all three functions. Duplicate runs are made
+harmless in code (the conditional write in `remediation/`), not by concurrency.
 
 | Root | Account | What it does | What it does not prove |
 | ---- | ------- | ------------ | ---------------------- |
