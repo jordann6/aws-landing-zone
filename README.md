@@ -156,6 +156,13 @@ the network does not disable sharing for future demos.
 | `secrets/` | Metadata-only scan-target roles for the secrets scanner in every member account | Retained, near zero cost |
 | `incident/` | Finding routing, alarm reader, n8n image mirror, forensics runbook and the responder (LZ mode) | Forensics retained, responder temporary |
 | `standby/` | us-west-2 warm standby: multi-region KMS, encrypted cross-region replica, Route 53 failover, promotion | Temporary, destroyed after proof |
+| `uptime/` | 5-minute website check with metrics and alarms to the ops topic (shared-services) | Retained, small standing cost, deployed 2026-10-16 |
+| `backup-verify/` | Retained, private landing bucket (kept through teardowns) and a daily freshness check (shared-services) | Retained, small standing cost, deployed 2026-10-16 |
+| `remediation/` | Tag-scoped, circuit-broken EC2 reboot Lambda (prod), dry run by default | Retained, small standing cost, deployed 2026-10-16 |
+
+The last three are described in [standing-controls](docs/standing-controls.md) and
+[ADR-0005](docs/adr/0005-remediation-safety-model.md): deployed and smoke checked on
+2026-10-16; the failure-mode proofs are not done.
 
 Phase A observability is included in this repository. Its shared-services
 CloudWatch OAM sink, prod/network links, central alarms and security findings

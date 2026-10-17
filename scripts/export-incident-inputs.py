@@ -56,6 +56,25 @@ def forensics_inputs(alert_email):
     return variables
 
 
+def known_alarms(obs):
+    """Central alarms plus the standing uptime and backup-verify alarms.
+
+    The standing roots may not be applied, so a missing state contributes nothing.
+    Alarms the responder knows but has no remediation for are notify-only, so these
+    reach the on-call inbox (and the Claude summary) without any automatic action.
+    """
+    names = list(obs.get("alarm_names") or [])
+    for root in ("uptime", "backup-verify"):
+        try:
+            out = outputs(root)
+        except (SystemExit, subprocess.CalledProcessError):
+            continue
+        names += list(out.get("alarm_names") or [])
+        if out.get("alarm_name"):
+            names.append(out["alarm_name"])
+    return sorted(set(names))
+
+
 def responder_inputs(n8n_digest):
     inc = outputs("incident")
     obs = outputs("observability")
@@ -75,7 +94,7 @@ def responder_inputs(n8n_digest):
                                          r"arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[0-9a-f-]+", "ops topic key"),
         "alarm_reader_role_arn": require(inc.get("alarm_reader_role_arn"),
                                          r"arn:aws:iam::[0-9]{12}:role/incident-alarm-reader", "alarm reader role"),
-        "known_alarms": obs.get("alarm_names") or [],
+        "known_alarms": known_alarms(obs),
         "n8n_image": f"{repo}@{digest}",
     }
     for key, output in (("rds_instance_id", "rds_instance_id"), ("eks_cluster_name", "eks_cluster_name"),

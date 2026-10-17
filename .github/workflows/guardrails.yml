@@ -96,6 +96,43 @@ jobs:
       guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: incident
 
+  # The uptime/ root: a 5-minute website check with metrics and alarms in the monitoring account.
+  static_uptime:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    with:
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      terraform_dir: uptime
+
+  # The backup-verify/ root: a versioned backup bucket and its daily freshness check.
+  static_backup_verify:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    with:
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      terraform_dir: backup-verify
+
+  # The remediation/ root: a tag-scoped, circuit-broken reboot Lambda in the prod account.
+  static_remediation:
+    uses: jordann6/platform-guardrails/.github/workflows/tf-ci.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    with:
+      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      terraform_dir: remediation
+
+  # Behavior tests for the three standing roots' Lambdas. Credential-free: AWS
+  # clients are stubbed and DynamoDB is an in-memory fake.
+  python_tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --quiet boto3 pytest
+      - run: python -m pytest uptime/tests backup-verify/tests remediation/tests -q
+
   # The FinOps allocation policy (CostCenter) already runs inside `static`, since
   # tf-ci.yml evaluates the whole shared policy/ set. These jobs add the cost
   # *threshold*: a PR that raises a billable root's projected monthly cost by more
