@@ -54,6 +54,12 @@ with that compensating control. It is not a hole in the VPC.
 | 6 | Incident summary from a model in a real run (2026-10-17) | Pass. The same run's summarize step called Amazon Nova Lite: CloudTrail records one `Converse` from the remediate role at 06:36:44, and Bedrock metrics show 1 invocation, 99 output tokens, 0 client or server errors |
 | 7 | Recovery event takes no action (2026-10-17) | Pass. The alarm returned to OK on its own at 06:38:00 on the next check. The OK notice was relayed (200) and n8n made no remediate call, since the runbook acts on ALARM only |
 
+The 2026-10-17 session was torn down the same morning: the responder first (36
+resources, 07:02, the security group again waited about 21 minutes on the Lambda's
+network interface), then the gated destroy of delivery, workload and network (run
+39012172571, done 07:40). `verify-teardown` came back clean, the standing roots plan
+empty, and `HOURLY_STACK_ENABLED` is back to false.
+
 ## Bugs the live run found
 
 Both are real defects that unit tests and plans could not catch.
