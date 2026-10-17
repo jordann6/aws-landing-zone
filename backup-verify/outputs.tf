@@ -9,3 +9,7 @@ output "checker_function_name" {
 output "alarm_name" {
   value = try(aws_cloudwatch_metric_alarm.stale[0].alarm_name, null)
 }
+
+output "heartbeat_function_name" {
+  value = aws_lambda_function.heartbeat.function_name
+}
