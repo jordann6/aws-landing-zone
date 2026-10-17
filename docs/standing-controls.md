@@ -1,7 +1,8 @@
 # Standing controls: uptime, backup freshness, remediation
 
 Three small roots that stay deployed. Status: **deployed on 2026-10-16 and smoke
-checked. The live proofs below are not done.** Each root was applied from a saved
+checked. The uptime and backup failure proofs ran on 2026-10-17 (see Live proof).
+The remediation proofs are not done.** Each root was applied from a saved
 plan and its second plan came back empty. The smoke checks were one safe
 invocation per Lambda and a read of the bucket settings, not a demonstration of
 any control working under failure.
@@ -60,11 +61,29 @@ $0.40, plus $0.10 for each monitored instance added later. Lambda, EventBridge,
 DynamoDB, logs (30-day retention) and S3 are pennies. DynamoDB items expire by
 TTL: 90 days for uptime logs, twice the circuit window for remediation state.
 
-## Live proof (not done)
+## Live proof
 
-Each claim is recorded separately, with isolated targets:
+Each claim is recorded separately, with isolated targets. Times are UTC, 2026-10-17.
 
-1. Uptime: a controlled failing endpoint, never the portfolio site.
-2. Backup freshness: a dedicated test prefix or fixture object.
-3. Remediation: a disposable instance with explicit approval for interruption,
-   first with `dry_run = true`. A forced alarm and real CPU load are separate claims.
+| Claim | Result | Evidence |
+| ----- | ------ | -------- |
+| Uptime: a failing check raises the site-down alarm and notifies the ops topic | Proven | The check was pointed at a 404 path on the portfolio site (`/__uptime-proof-404`), so the site itself was never down. Two scheduled failures were recorded, and the alarm re-fired from them: "2 datapoints [0.0, 0.0] were less than the threshold (1.0)". The alarm history shows the ops-alarms topic action executed. The URL was then reverted and the alarm recovered to OK. |
+| Uptime: a stopped or unmeasured check alarms (missing data is breaching) | Observed, not a clean proof | The first attempt pointed the alarm at a new URL dimension with no data, and it went to ALARM with "no datapoints were received for 2 periods". That shows missing data breaches, but it is not evidence that a failing check does. The proof above was redone after real datapoints existed. |
+| Backup freshness: an empty bucket alarms | Proven | With the alarm temporarily enabled, the checker reported 0 objects at age 9999. The alarm reached ALARM about 90 seconds later and the ops-alarms topic action executed. The alarm was then turned off again. |
+| Backup freshness: a stale object alarms | Not proven | The 24-hour alarm window still held the 9999 datapoint from the empty-bucket check, so an aged object could not be shown on its own. Covered by `backup-verify/tests` only. Prove it once a producer writes to the bucket. |
+| Remediation: dry run, real reboot, cooldown, unmonitored skip, circuit breaker | Not run | Needs a disposable tagged instance in prod. Covered by the 14 unit tests only. |
+| Remediation: real CPU load triggers the alarm | Not run | Needs SSM access on the instance. A forced alarm proves the response path, not this. |
+
+Each proof changed a live setting temporarily and was reverted. After the uptime
+and backup proofs both roots planned empty (no drift).
+
+### Remaining proof plan
+
+Remediation, on a disposable instance with explicit approval for interruption,
+first with `dry_run = true`:
+
+1. Forced alarm in dry run: a notice is sent and nothing is rebooted.
+2. Forced alarm with `dry_run = false`: the instance is rebooted.
+3. A second forced alarm inside the cooldown is skipped.
+4. An instance without `Monitored=true` is left alone.
+5. Three attempts open the circuit, and one on-call page is sent.
