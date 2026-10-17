@@ -61,7 +61,7 @@ def known_alarms(obs):
 
     The standing roots may not be applied, so a missing state contributes nothing.
     Alarms the responder knows but has no remediation for are notify-only, so these
-    reach the on-call inbox (and the Claude summary) without any automatic action.
+    reach the on-call inbox (with the model summary) without any automatic action.
     """
     names = list(obs.get("alarm_names") or [])
     for root in ("uptime", "backup-verify"):
