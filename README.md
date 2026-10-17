@@ -162,7 +162,8 @@ the network does not disable sharing for future demos.
 
 The last three are described in [standing-controls](docs/standing-controls.md) and
 [ADR-0005](docs/adr/0005-remediation-safety-model.md): deployed and smoke checked on
-2026-10-16; the uptime and backup failure proofs ran 2026-10-17, the remediation proofs are not done.
+2026-10-16; the uptime, backup and remediation failure proofs ran 2026-10-17 (remediation
+with forced alarms: dry run, reboot, cooldown, unmonitored skip and circuit breaker), and ADR-0005 is accepted.
 
 Phase A observability is included in this repository. Its shared-services
 CloudWatch OAM sink, prod/network links, central alarms and security findings
