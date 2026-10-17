@@ -1,8 +1,8 @@
 # Standing controls: uptime, backup freshness, remediation
 
 Three small roots that stay deployed. Status: **deployed on 2026-10-16 and smoke
-checked. The uptime and backup failure proofs ran on 2026-10-17 (see Live proof).
-The remediation proofs are not done.** Each root was applied from a saved
+checked. The uptime, backup and remediation response-path proofs ran on 2026-10-17
+(see Live proof). Real CPU load and a stale backup object are not proven.** Each root was applied from a saved
 plan and its second plan came back empty. The smoke checks were one safe
 invocation per Lambda and a read of the bucket settings, not a demonstration of
 any control working under failure.
@@ -27,7 +27,7 @@ harmless in code (the conditional write in `remediation/`), not by concurrency.
 | ---- | ------- | ------------ | ---------------------- |
 | `uptime/` | shared-services | A Lambda checks jordandesigns.io every 5 minutes (status, optional body text, certificate days left, one retry) and writes metrics and a log row. Alarms for site down, high latency and certificate expiry notify the ops topic. A checker that stops reporting also alarms. | A single vantage point inside AWS. It says nothing about users elsewhere. |
 | `backup-verify/` | shared-services | The retained landing bucket (`lz-landing-<account>-<region>`): versioned, KMS-encrypted, TLS-only, never public, tiered to cold storage, nothing expires by default. `prevent_destroy` on the bucket and its key keeps hourly teardowns and a stray destroy from removing it. A daily Lambda reports the age of the newest object and the object count. The stale alarm is **off** until a producer writes here (`freshness_alarm_enabled`), because cold data would alarm forever. | Freshness only, and only once the alarm is on. Nothing writes to the bucket yet and no prefix or producer is defined. It does not show a backup completed or can be restored. Restore verification is deferred. |
-| `remediation/` | prod | A high-CPU alarm on a monitored instance reboots it behind a cooldown and a circuit breaker. See [ADR-0005](adr/0005-remediation-safety-model.md). | Disabled by default: `dry_run = true` and no monitored instances. A forced alarm proves the response path, not that real CPU load triggers it. |
+| `remediation/` | prod | A high-CPU alarm on a monitored instance reboots it behind a cooldown and a circuit breaker. See [ADR-0005](adr/0005-remediation-safety-model.md). | Disabled by default: `dry_run = true` and no monitored instances. The live proofs forced the alarm, so they prove the response path, not that real CPU load triggers it. |
 
 ## How they connect
 
@@ -71,19 +71,28 @@ Each claim is recorded separately, with isolated targets. Times are UTC, 2026-10
 | Uptime: a stopped or unmeasured check alarms (missing data is breaching) | Observed, not a clean proof | The first attempt pointed the alarm at a new URL dimension with no data, and it went to ALARM with "no datapoints were received for 2 periods". That shows missing data breaches, but it is not evidence that a failing check does. The proof above was redone after real datapoints existed. |
 | Backup freshness: an empty bucket alarms | Proven | With the alarm temporarily enabled, the checker reported 0 objects at age 9999. The alarm reached ALARM about 90 seconds later and the ops-alarms topic action executed. The alarm was then turned off again. |
 | Backup freshness: a stale object alarms | Not proven | The 24-hour alarm window still held the 9999 datapoint from the empty-bucket check, so an aged object could not be shown on its own. Covered by `backup-verify/tests` only. Prove it once a producer writes to the bucket. |
-| Remediation: dry run, real reboot, cooldown, unmonitored skip, circuit breaker | Not run | Needs a disposable tagged instance in prod. Covered by the 14 unit tests only. |
-| Remediation: real CPU load triggers the alarm | Not run | Needs SSM access on the instance. A forced alarm proves the response path, not this. |
+| Remediation: dry run sends a notice and reboots nothing | Proven | Forced alarm at 02:57 with `dry_run = true`. The Lambda logged `remediating` with `dry_run: true`, remediation-alerts published and delivered 1 message, the state table stayed empty, and CloudTrail has no RebootInstances event for it. |
+| Remediation: a forced alarm reboots a monitored instance | Proven | Forced alarm at 03:00 with `dry_run = false`. The Lambda logged `remediating` with `dry_run: false`, one attempt was written to the state table (version 1), and CloudTrail recorded RebootInstances from the `remediation-reboot` session at 03:00:00. |
+| Remediation: a second alarm inside the cooldown is skipped | Proven | Forced again about a minute later: `skipped`, reason `cooldown` (900 s). The state item did not change. |
+| Remediation: an instance without `Monitored=true` is left alone | Proven | Tag removed, alarm forced: `skipped`, reason `not_monitored`. The tag was restored afterwards. |
+| Remediation: three attempts open the circuit and page on-call once | Proven | State item cleared, cooldown set to 1 s, alarm forced 5 times about 20 s apart. Forces 1 to 3 rebooted the instance (CloudTrail at 03:03:18, 03:03:37, 03:03:58). Force 4 returned `escalated`, `circuit_open`, `paged: true`. Force 5 returned `paged: false`. remediation-oncall published and delivered exactly 1 message. |
+| Remediation: real CPU load triggers the alarm | Not proven | Needs SSM access on the instance (an instance profile and a route or endpoints to SSM). Every proof above forced the alarm state, so it proves the response path only. |
 
-Each proof changed a live setting temporarily and was reverted. After the uptime
-and backup proofs both roots planned empty (no drift).
+Metrics for the instance matched the logs: RemediationSuccess 5 (1 dry run, 4
+reboots), RemediationSkipped 1 (the cooldown; the `not_monitored` skip emits no
+metric), EscalationTriggered 1, EscalationSuppressed 1, and TimeToRemediateMs
+averaged about 2.4 s from alarm to action. RemediationSuccess also counts dry runs,
+so on its own it cannot tell a drill from a reboot. The log line and the notice
+subject can.
 
-### Remaining proof plan
+The proof instance was a t3.nano running AL2023 x86_64, in the prod default VPC
+with no public IP, IMDSv2 required and an encrypted root volume. An arm64 launch
+was refused first with `InvalidAMIID.NotFound`: the Workloads EC2 baseline allows
+only `al2023-ami-*-x86_64` images, so prod cannot see arm64 AMIs at all. The
+guardrail behaved as designed. The instance was terminated afterwards, leaving
+prod with no instances.
 
-Remediation, on a disposable instance with explicit approval for interruption,
-first with `dry_run = true`:
-
-1. Forced alarm in dry run: a notice is sent and nothing is rebooted.
-2. Forced alarm with `dry_run = false`: the instance is rebooted.
-3. A second forced alarm inside the cooldown is skipped.
-4. An instance without `Monitored=true` is left alone.
-5. Three attempts open the circuit, and one on-call page is sent.
+Each proof changed a live setting temporarily and was reverted. The remediation
+overrides were passed as `-var` flags only, never committed. Afterwards the alarm
+was removed, the Lambda was back to `dry_run = true` with a 900 s cooldown, the
+state table was empty, and all three roots planned empty (no drift).
