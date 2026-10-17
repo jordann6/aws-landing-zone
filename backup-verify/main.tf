@@ -40,7 +40,7 @@ data "aws_iam_policy_document" "key" {
   }
 
   statement {
-    sid       = "AllowLogsForTheCheckerLogGroup"
+    sid       = "AllowLogsForTheLambdaLogGroups"
     effect    = "Allow"
     actions   = ["kms:Encrypt*", "kms:Decrypt*", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:Describe*"]
     resources = ["*"]
@@ -51,7 +51,10 @@ data "aws_iam_policy_document" "key" {
     condition {
       test     = "ArnEquals"
       variable = "kms:EncryptionContext:aws:logs:arn"
-      values   = ["arn:aws:logs:${var.region}:${local.account_id}:log-group:${local.log_group}"]
+      values = [
+        "arn:aws:logs:${var.region}:${local.account_id}:log-group:${local.log_group}",
+        "arn:aws:logs:${var.region}:${local.account_id}:log-group:/aws/lambda/${local.name}-heartbeat",
+      ]
     }
   }
 }
@@ -192,6 +195,24 @@ resource "aws_s3_bucket_lifecycle_configuration" "backups" {
     }
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
+    }
+  }
+
+  # Synthetic heartbeat objects are only there to be measured, so they do not
+  # pile up. Expiration takes precedence over the tiering rule above.
+  rule {
+    id     = "heartbeat-expiry"
+    status = "Enabled"
+
+    filter {
+      prefix = var.heartbeat_prefix
+    }
+
+    expiration {
+      days = var.heartbeat_expire_days
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 1
     }
   }
 }
