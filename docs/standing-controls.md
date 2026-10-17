@@ -82,9 +82,12 @@ Each claim is recorded separately, with isolated targets. Times are UTC, 2026-10
 Metrics for the forced-alarm instance matched the logs: RemediationSuccess 5 (1 dry run, 4
 reboots), RemediationSkipped 1 (the cooldown; the `not_monitored` skip emits no
 metric), EscalationTriggered 1, EscalationSuppressed 1, and TimeToRemediateMs
-averaged about 2.4 s from alarm to action. RemediationSuccess also counts dry runs,
-so on its own it cannot tell a drill from a reboot. The log line and the notice
-subject can.
+averaged about 2.4 s from alarm to action. At the time RemediationSuccess also
+counted dry runs, so on its own it could not tell a drill from a reboot. It now
+carries a `DryRun` dimension (`true` or `false`) alongside `Action` and
+`ResourceId`, so reboots can be counted alone. The proofs above predate it, so
+their datapoints sit in the old two-dimension series. The other metrics keep their
+two dimensions.
 
 The proof instance was a t3.nano running AL2023 x86_64, in the prod default VPC
 with no public IP, IMDSv2 required and an encrypted root volume. An arm64 launch
