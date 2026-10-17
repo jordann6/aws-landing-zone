@@ -32,7 +32,7 @@ there. AWS APIs go through the VPC endpoints, and the rest (Lambda, RDS and Bedr
 APIs) goes through the hub firewall's default-deny domain allowlist. The summary call
 goes to `bedrock-runtime.us-east-1.amazonaws.com`, which the existing `.amazonaws.com`
 entry already covers. The `bedrock-mantle.us-east-1.api.aws` entry added for the earlier
-Claude path is no longer used.
+Claude path was removed from the allowlist on 2026-10-17.
 
 ### Why Trivy flags two CRITICAL findings (AWS-0104)
 
