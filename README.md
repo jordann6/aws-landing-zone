@@ -23,9 +23,18 @@ Existing verification below covers the earlier EKS/RDS and network demo.
 runbook and finding routing stay up as standing controls in the security account. Drills
 and a forced-alarm remediation with an RDS failover passed; the live run found two real
 bugs (an evidence step that ran before the snapshot finished, and an SCP that made a
-resource undestroyable). The Claude-written summary is built but **unproven** (Bedrock
-entitlement), so the proof used template summaries. See
+resource undestroyable). A second responder session on 2026-10-17 proved the standing
+uptime alarm reaches the inbox as notify-only, with an incident summary written by Amazon
+Nova Lite in a real run. Claude was dropped for the summary: this account cannot call it
+in-region. The responder was destroyed again afterwards. See
 [docs/incident-response.md](docs/incident-response.md).
+
+**Standing controls status:** `uptime/`, `backup-verify/` and `remediation/` were
+deployed on 2026-10-16 and stay up. Their failure proofs ran on 2026-10-17: a failing
+uptime check alarms, an empty backup bucket alarms, and remediation was proven with forced
+alarms and with real CPU load in dry run. A synthetic heartbeat now writes to the landing
+bucket every 6 hours. A stale backup object alarming is **not proven yet**. See
+[docs/standing-controls.md](docs/standing-controls.md).
 
 **Warm standby status:** the us-west-2 data-tier standby was deployed, proven and
 destroyed on 2026-10-07. `scripts/test-standby.sh` passed 8 of 8: encrypted cross-region
@@ -48,10 +57,13 @@ PostgreSQL. Application integration is outside the completion scope.
 ![AWS landing-zone architecture and resource lifecycle](docs/architecture.png)
 
 The diagram shows the infrastructure design and configured relationships, not a
-running application or proof of traffic. Blue clusters are retained foundations;
-orange clusters are temporary network and workload layers. Dev, test and sandbox
-accounts exist without deployed spoke VPCs. Cross-region backup is disabled; the
-standby uses a cross-region RDS replica.
+running application or proof of traffic. Blue clusters are retained: the organization,
+governance, observability and the standing controls. Orange clusters are temporary: the
+network, workload, compute and delivery layers, the incident responder and the us-west-2
+standby, all destroyed after their proofs. The grey cluster is the GitHub pipeline. The
+responder's ops-alarms node is the shared-services topic, drawn again inside the
+responder. Dev, test and sandbox accounts exist without deployed spoke VPCs. Cross-region
+backup is disabled; the standby uses a cross-region RDS replica.
 
 ## Proven in live runs
 
@@ -64,12 +76,14 @@ the earlier layers, and by CI behind reviewer gates for the infra pipeline.
 | Infra pipeline | 196 resources applied through CI across three roots (network 50, workload 116, delivery 30) over two runs, the first stopping safely at 47 of 50 network resources on a defect; second plan empty, gated destroy to empty state with the hourly check passing on each root | [ADR-0004](docs/adr/0004-gated-infra-pipeline.md) |
 | Guardrails and compute | 20/20 guardrail denials, hardened golden AMI after reboot, private management instance 17/17 | [compute-baseline](docs/compute-baseline.md) |
 | Secrets scanner | Cross-account scan of all members, positive control flagged, value reads explicitly denied | [secrets-lifecycle](docs/secrets-lifecycle.md) |
-| Incident tooling | Finding to forensics runbook, isolation drill with encrypted evidence, forced alarm to RDS failover in about 35 seconds | [incident-response](docs/incident-response.md) |
+| Incident tooling | Finding to forensics runbook, isolation drill with encrypted evidence, forced alarm to RDS failover in about 35 seconds; standing uptime alarm handled notify-only with an Amazon Nova Lite summary | [incident-response](docs/incident-response.md) |
+| Standing controls | Failing uptime check alarms; empty backup bucket alarms; heartbeat producer writes to the bucket; remediation dry run, reboot, cooldown, unmonitored skip and circuit breaker, plus real CPU load raising the alarm in dry run | [standing-controls](docs/standing-controls.md) |
 | Warm standby | us-west-2 replica on a multi-region key, DNS failover, automated promotion, 8/8 checks | [warm-standby-design](docs/warm-standby-design.md) |
 
-Not proven, stated plainly: Claude-written incident summaries (built, blocked by a Bedrock
-account entitlement), end-to-end firewall traffic, and a live listing of us-west-2 after the
-standby was destroyed (Terraform's destroy and empty state are the evidence).
+Not proven, stated plainly: a stale backup object raising the freshness alarm, a real
+reboot following real CPU load (only dry run so far), restore of a real backup,
+end-to-end firewall traffic, and a live listing of us-west-2 after the standby was
+destroyed (Terraform's destroy and empty state are the evidence).
 
 ## Companion repositories
 
@@ -79,7 +93,7 @@ repositories with their own history and a landing-zone mode:
 | Repository | Role in this landing zone |
 |---|---|
 | [aws-incident-forensics](https://github.com/jordann6/aws-incident-forensics) | Containment and evidence runbook, a standing control in the security account |
-| [aws-incident-responder](https://github.com/jordann6/aws-incident-responder) | Private n8n remediation workflow in the prod account, hourly |
+| [aws-incident-responder](https://github.com/jordann6/aws-incident-responder) | Private n8n remediation workflow in the prod account, hourly; notify-only for the standing alarms |
 | [aws-secrets-lifecycle](https://github.com/jordann6/aws-secrets-lifecycle) | The scanner deployed into the security account |
 
 The portfolio write-up is the AWS Landing Zone case study at
@@ -93,8 +107,9 @@ IN_SYNC, both RAM associations were ASSOCIATED, and prod could see the shared
 Transit Gateway.
 EKS 1.35 and its two-node AL2023 group were ACTIVE. PostgreSQL 16.14 was available,
 private, encrypted and Multi-AZ. Private endpoints and TGW routing were verified.
-These checks establish infrastructure state and configuration; forced database
-failover and end-to-end firewall traffic have not been demonstrated.
+These checks establish infrastructure state and configuration. Forced database
+failover was demonstrated later by the incident tooling; end-to-end firewall traffic
+has not been demonstrated.
 
 **Workload teardown is complete.** Live checks confirm zero workload state
 resources, EKS clusters, nodes, RDS instances and prod interface endpoints, with
@@ -148,16 +163,18 @@ the network does not disable sharing for future demos.
 | Root | Purpose | Lifecycle |
 |---|---|---|
 | `accounts/` | Organization, OUs, accounts, SCPs, tag policy and RAM organization onboarding | Permanent |
+| `bootstrap/` | Dedicated state backend, GitHub OIDC trust, management `gha-plan` and `gha-apply`, and their matching roles in network and prod | Retained, operator-applied |
 | `terraform/` | Audit, detective controls, identity and budgets | Retained baseline |
-| `observability/` | CloudWatch OAM links, central alarms and security findings routing | Retained baseline |
+| `observability/` | CloudWatch OAM links, central alarms, the ops-alarms topic and security findings routing | Retained baseline |
 | `network/` | Shared TGW, inspection VPC, firewall, NAT, endpoints and network logs | Temporary, hourly billing |
 | `workload/` | Private prod VPC, EKS, RDS, backup, EC2 defaults, golden AMI pipeline and SSM patching | Temporary, hourly billing |
+| `delivery/` | release-guard support in prod: GitHub OIDC publish and promote roles, ECR repositories, the deployments table and IRSA roles | Temporary, destroyed first by `destroy.yml` |
 | `compute/` | Hardened management instance from the golden AMI, SSM-only access | Temporary, destroyed first |
 | `secrets/` | Metadata-only scan-target roles for the secrets scanner in every member account | Retained, near zero cost |
-| `incident/` | Finding routing, alarm reader, n8n image mirror, forensics runbook and the responder (LZ mode) | Forensics retained, responder temporary |
+| `incident/` | Forensics target roles in prod, the incident alarm reader in shared-services and the n8n image mirror. The runbook, its finding routing and the responder deploy from their companion repositories in landing-zone mode | Retained; the responder is temporary |
 | `standby/` | us-west-2 warm standby: multi-region KMS, encrypted cross-region replica, Route 53 failover, promotion | Temporary, destroyed after proof |
 | `uptime/` | 5-minute website check with metrics and alarms to the ops topic (shared-services) | Retained, small standing cost, deployed 2026-10-16 |
-| `backup-verify/` | Retained, private landing bucket (kept through teardowns) and a daily freshness check (shared-services) | Retained, small standing cost, deployed 2026-10-16 |
+| `backup-verify/` | Retained, private landing bucket (kept through teardowns), a synthetic heartbeat producer every 6 hours, a daily freshness check and an optional stale alarm (shared-services) | Retained, small standing cost, deployed 2026-10-16 |
 | `remediation/` | Tag-scoped, circuit-broken EC2 reboot Lambda (prod), dry run by default | Retained, small standing cost, deployed 2026-10-16 |
 
 The last three are described in [standing-controls](docs/standing-controls.md) and
@@ -165,6 +182,7 @@ The last three are described in [standing-controls](docs/standing-controls.md) a
 2026-10-16; the uptime, backup and remediation failure proofs ran 2026-10-17 (remediation
 with forced alarms: dry run, reboot, cooldown, unmonitored skip and circuit breaker; then real
 CPU load raised the alarm on its own and drew a dry-run notice), and ADR-0005 is accepted.
+The heartbeat producer followed the same day. The stale-object alarm proof is pending.
 
 Phase A observability is included in this repository. Its shared-services
 CloudWatch OAM sink, prod/network links, central alarms and security findings
@@ -211,8 +229,8 @@ VPC flow logs and firewall flow/alert logs support private access and investigat
 | Compute baseline | EBS default encryption on a CMK, IMDSv2 defaults, node launch template, STIG + `cis_baseline` golden AMI, SSM patch baseline; see [compute baseline](docs/compute-baseline.md) |
 
 The deployed node group uses the standard AL2023 EKS image, which stays the node
-image by design. The golden AMI is for standalone instances; no golden AMI has
-been built yet. No application
+image by design. The golden AMI is for standalone instances: one was built and
+tested in the 2026-10-06 session and deleted at teardown. No application
 has been deployed to prove the permitted app-to-database path.
 
 ## Infra pipeline
@@ -306,9 +324,9 @@ objects.
 
 CI runs the shared [platform-guardrails](https://github.com/jordann6/platform-guardrails)
 static gates (gitleaks, fmt/validate, tflint, Checkov, Trivy, conftest OPA) on
-the accounts, governance, network, workload, and observability roots. OPA checks
-required tags and CostCenter. A repo-local Infracost workflow gates network,
-workload, and observability changes at a $50/month increase, with an explicit
+every root except `standby/`, and a `python_tests` job runs the standing-control unit
+tests. OPA checks required tags and CostCenter. A repo-local Infracost workflow gates
+network, workload, delivery and observability changes at a $50/month increase, with an explicit
 `cost-approved` PR label override. It runs before the PR report, rejects missing
 cost estimates, and stores each root's report separately. Hosted Infracost
 policy enforcement is disabled because its example tagging rules conflict with
