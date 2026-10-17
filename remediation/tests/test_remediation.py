@@ -141,6 +141,27 @@ def test_dry_run_reports_but_does_not_reboot_or_consume_budget():
     assert a.ddb.items == {}  # nothing recorded, so the real budget is untouched
 
 
+def _metric_dims(a, name):
+    """Dimensions of every put_metric_data call for one metric name."""
+    found = []
+    for call in a.cw.put_metric_data.call_args_list:
+        for datum in call.kwargs["MetricData"]:
+            if datum["MetricName"] == name:
+                found.append({d["Name"]: d["Value"] for d in datum["Dimensions"]})
+    return found
+
+
+@pytest.mark.parametrize("dry_run", ["true", "false"])
+def test_success_metric_carries_dry_run_dimension(dry_run):
+    a = load(dry_run=dry_run)
+    a.lambda_handler(alarm_event(), CTX)
+    assert _metric_dims(a, "RemediationSuccess") == [
+        {"Action": "reboot", "ResourceId": INSTANCE, "DryRun": dry_run}
+    ]
+    # Other metrics keep their two dimensions.
+    assert _metric_dims(a, "TimeToRemediateMs") == [{"Action": "reboot", "ResourceId": INSTANCE}]
+
+
 def test_failed_reboot_counts_against_the_budget():
     a = load()
     a.ec2.reboot_instances.side_effect = ClientError({"Error": {"Code": "UnauthorizedOperation"}}, "RebootInstances")

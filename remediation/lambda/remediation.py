@@ -27,8 +27,14 @@ ALARM_PREFIX = os.environ.get("ALARM_PREFIX", "remediate-cpu-")
 
 # --- Observability ---------------------------------------------------------
 
-def _emit_metric(name: str, action: str, resource_id: str, value: float = 1.0, unit: str = "Count") -> None:
+def _emit_metric(name: str, action: str, resource_id: str, value: float = 1.0, unit: str = "Count",
+                 extra_dims: dict[str, str] | None = None) -> None:
     """Emit a CloudWatch custom metric. Never let telemetry failures break remediation."""
+    dimensions = [
+        {"Name": "Action", "Value": action},
+        {"Name": "ResourceId", "Value": resource_id},
+    ]
+    dimensions += [{"Name": k, "Value": v} for k, v in (extra_dims or {}).items()]
     try:
         cw.put_metric_data(
             Namespace=METRIC_NAMESPACE,
@@ -36,10 +42,7 @@ def _emit_metric(name: str, action: str, resource_id: str, value: float = 1.0, u
                 "MetricName": name,
                 "Value": value,
                 "Unit": unit,
-                "Dimensions": [
-                    {"Name": "Action", "Value": action},
-                    {"Name": "ResourceId", "Value": resource_id},
-                ],
+                "Dimensions": dimensions,
             }],
         )
     except ClientError as e:
@@ -266,7 +269,9 @@ def run_remediation(action: str, resource_id: str, request_id: str, trigger_even
         print(json.dumps({"level": "error", **payload, "request_id": request_id}))
         raise
 
-    _emit_metric("RemediationSuccess", action, resource_id)
+    # DryRun splits drills from real actions, so a dashboard can count reboots alone.
+    _emit_metric("RemediationSuccess", action, resource_id,
+                 extra_dims={"DryRun": "true" if DRY_RUN else "false"})
     latency = _event_latency_ms(trigger_event)
     if latency is not None:
         _emit_metric("TimeToRemediateMs", action, resource_id, value=latency, unit="Milliseconds")
