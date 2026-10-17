@@ -2,7 +2,8 @@
 
 Three small roots that stay deployed. Status: **deployed on 2026-10-16 and smoke
 checked. The uptime, backup and remediation response-path proofs ran on 2026-10-17
-(see Live proof). Real CPU load and a stale backup object are not proven.** Each root was applied from a saved
+(see Live proof), and real CPU load raised the remediation alarm on its own in dry
+run. A stale backup object is not proven.** Each root was applied from a saved
 plan and its second plan came back empty. The smoke checks were one safe
 invocation per Lambda and a read of the bucket settings, not a demonstration of
 any control working under failure.
@@ -27,7 +28,7 @@ harmless in code (the conditional write in `remediation/`), not by concurrency.
 | ---- | ------- | ------------ | ---------------------- |
 | `uptime/` | shared-services | A Lambda checks jordandesigns.io every 5 minutes (status, optional body text, certificate days left, one retry) and writes metrics and a log row. Alarms for site down, high latency and certificate expiry notify the ops topic. A checker that stops reporting also alarms. | A single vantage point inside AWS. It says nothing about users elsewhere. |
 | `backup-verify/` | shared-services | The retained landing bucket (`lz-landing-<account>-<region>`): versioned, KMS-encrypted, TLS-only, never public, tiered to cold storage, nothing expires by default. `prevent_destroy` on the bucket and its key keeps hourly teardowns and a stray destroy from removing it. A daily Lambda reports the age of the newest object and the object count. The stale alarm is **off** until a producer writes here (`freshness_alarm_enabled`), because cold data would alarm forever. | Freshness only, and only once the alarm is on. Nothing writes to the bucket yet and no prefix or producer is defined. It does not show a backup completed or can be restored. Restore verification is deferred. |
-| `remediation/` | prod | A high-CPU alarm on a monitored instance reboots it behind a cooldown and a circuit breaker. See [ADR-0005](adr/0005-remediation-safety-model.md). | Disabled by default: `dry_run = true` and no monitored instances. The live proofs forced the alarm, so they prove the response path, not that real CPU load triggers it. |
+| `remediation/` | prod | A high-CPU alarm on a monitored instance reboots it behind a cooldown and a circuit breaker. See [ADR-0005](adr/0005-remediation-safety-model.md). | Disabled by default: `dry_run = true` and no monitored instances. The reboot, cooldown and circuit proofs forced the alarm. Real CPU load was shown to raise the alarm in dry run only, so no real reboot has followed real load. |
 
 ## How they connect
 
@@ -76,9 +77,9 @@ Each claim is recorded separately, with isolated targets. Times are UTC, 2026-10
 | Remediation: a second alarm inside the cooldown is skipped | Proven | Forced again about a minute later: `skipped`, reason `cooldown` (900 s). The state item did not change. |
 | Remediation: an instance without `Monitored=true` is left alone | Proven | Tag removed, alarm forced: `skipped`, reason `not_monitored`. The tag was restored afterwards. |
 | Remediation: three attempts open the circuit and page on-call once | Proven | State item cleared, cooldown set to 1 s, alarm forced 5 times about 20 s apart. Forces 1 to 3 rebooted the instance (CloudTrail at 03:03:18, 03:03:37, 03:03:58). Force 4 returned `escalated`, `circuit_open`, `paged: true`. Force 5 returned `paged: false`. remediation-oncall published and delivered exactly 1 message. |
-| Remediation: real CPU load triggers the alarm | Not proven | Needs SSM access on the instance (an instance profile and a route or endpoints to SSM). Every proof above forced the alarm state, so it proves the response path only. |
+| Remediation: real CPU load triggers the alarm | Proven (dry run) | Separate run on a fresh instance. A busy loop on each vCPU was started through SSM send-command at 03:28 and nothing was forced. At 03:36:31 the alarm went from OK to ALARM on its own: "2 datapoints [99.99, 99.995] were greater than or equal to the threshold (80.0)". The Lambda received the event at 03:36:31 and logged `remediating` with `dry_run: true`. remediation-alerts published 1 and delivered 1 (0 failed), remediation-oncall published nothing, the state table stayed empty, and CloudTrail has no RebootInstances event since 03:30. RemediationSuccess 1, TimeToRemediateMs about 2.9 s. |
 
-Metrics for the instance matched the logs: RemediationSuccess 5 (1 dry run, 4
+Metrics for the forced-alarm instance matched the logs: RemediationSuccess 5 (1 dry run, 4
 reboots), RemediationSkipped 1 (the cooldown; the `not_monitored` skip emits no
 metric), EscalationTriggered 1, EscalationSuppressed 1, and TimeToRemediateMs
 averaged about 2.4 s from alarm to action. RemediationSuccess also counts dry runs,
@@ -91,6 +92,15 @@ was refused first with `InvalidAMIID.NotFound`: the Workloads EC2 baseline allow
 only `al2023-ami-*-x86_64` images, so prod cannot see arm64 AMIs at all. The
 guardrail behaved as designed. The instance was terminated afterwards, leaving
 prod with no instances.
+
+The CPU-load instance was a second t3.nano (AL2023 x86_64, IMDSv2 required,
+encrypted gp3 root, `Monitored=true`) with a temporary instance profile carrying
+only AmazonSSMManagedInstanceCore. It reached SSM through a public IP in the
+default VPC, behind a temporary security group with no inbound rules, so nothing
+could connect to it. T3 credits are unlimited by default, so the sustained load
+was not throttled. The burner was wrapped in `timeout` so it would stop on its
+own. Afterwards the instance was terminated and the security group, role and
+instance profile were deleted.
 
 Each proof changed a live setting temporarily and was reverted. The remediation
 overrides were passed as `-var` flags only, never committed. Afterwards the alarm

@@ -1,6 +1,6 @@
 # ADR-0005: Safety model for automatic remediation
 
-- **Status:** accepted 2026-10-17 (dry run, reboot, cooldown, unmonitored skip and circuit breaker proven live with forced alarms; real CPU load not yet proven, see [standing-controls](../standing-controls.md#live-proof))
+- **Status:** accepted 2026-10-17 (dry run, reboot, cooldown, unmonitored skip and circuit breaker proven live with forced alarms; real CPU load then raised the alarm on its own and drew a dry-run notice, see [standing-controls](../standing-controls.md#live-proof))
 - **Date:** 2026-10-16
 
 ## Context
@@ -45,7 +45,8 @@ rule has a unit test in `remediation/tests/test_remediation.py`.
 
 - Real remediation stays disabled (`dry_run = true`, no monitored instances) by
   default. The forced-alarm proofs on 2026-10-17 recorded each rule separately,
-  including the circuit opening and a single page. Real CPU load triggering the
-  alarm is still unproven and needs SSM access on a test instance.
+  including the circuit opening and a single page. A separate run the same day
+  drove real CPU load through SSM and the alarm fired from its own datapoints,
+  with `dry_run = true`, so no real reboot has been triggered by real load.
 - The state table, topics and key are a small standing cost in prod.
 - Only reboot exists. A new action needs its own eligibility rule and tests.
