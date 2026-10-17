@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
     with:
       terraform_dir: network
       environment: prod-apply
@@ -50,14 +50,14 @@ jobs:
       apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       skip_apply_when_unchanged: true
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
 
   workload:
     needs: network
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
     with:
       terraform_dir: workload
       environment: prod-apply
@@ -65,7 +65,7 @@ jobs:
       apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       skip_apply_when_unchanged: true
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
 
   # The deployment contract is not published here: release-guard reads it from
   # SSM in the prod account, and these jobs hold management-account credentials.
@@ -75,7 +75,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
     with:
       terraform_dir: delivery
       environment: prod-apply
@@ -83,7 +83,7 @@ jobs:
       apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       skip_apply_when_unchanged: true
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
 
   # ---- Second plan: must be empty ----------------------------------------------
   replan_network:
@@ -92,12 +92,12 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
     with:
       terraform_dir: network
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
 
   replan_workload:
     needs: delivery
@@ -105,12 +105,12 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
     with:
       terraform_dir: workload
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
 
   replan_delivery:
     needs: delivery
@@ -118,12 +118,12 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
     with:
       terraform_dir: delivery
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
 
   no_drift:
     name: Second plan is empty
