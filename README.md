@@ -68,8 +68,9 @@ state sits in a dedicated, KMS-encrypted backend that no plan can delete
 
 ## What the live runs found
 
-Plans, unit tests and the static gates passed on all of these. Each one only
-showed up against the real organization.
+Plans, unit tests and the static gates passed on all of these. The first was
+caught while designing the pipeline; the other five surfaced only against the
+real organization.
 
 1. **The CI roles could never have been assumed.** This repository's OIDC
    tokens carry immutable subjects (`repo:owner@id/repo@id:...`), and the trust
