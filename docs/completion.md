@@ -103,7 +103,7 @@ under `/private/tmp` must be recreated if unavailable.
 
 Format, Terraform validation and local static security checks passed during
 closeout; subsequent documentation diff and link checks also passed. Review the
-final diff before publication. Commit, push and merge only when requested.
+final diff before publication.
 Document deferred features and proof limits,
 update the private handoff, and check billing after Cost Explorer data catches up.
 Legacy gateway state-history cleanup is complete: 20 obsolete versions were
@@ -126,3 +126,46 @@ closed again before verification; see [warm-standby-design.md](warm-standby-desi
 
 Open and not done: confirming the security-findings SNS subscription, the Claude summary
 path (built, unproven, Bedrock entitlement), and retiring the old gateway provider keys.
+
+## Phase C closeout notes (moved from the README)
+
+Before teardown, Phase C verification recorded **50 network resources and 85
+workload resources deployed** in `us-east-1`. Network Firewall was READY and
+IN_SYNC, both RAM associations were ASSOCIATED, and prod could see the shared
+Transit Gateway.
+EKS 1.35 and its two-node AL2023 group were ACTIVE. PostgreSQL 16.14 was available,
+private, encrypted and Multi-AZ. Private endpoints and TGW routing were verified.
+These checks establish infrastructure state and configuration. Forced database
+failover was demonstrated later by the incident tooling; end-to-end firewall traffic
+has not been demonstrated.
+
+**Workload teardown is complete.** Live checks confirm zero workload state
+resources, EKS clusters, nodes, RDS instances and prod interface endpoints, with
+the backup vault and app repository gone. The initial apply removed 84 resources
+but timed out disabling Inspector; an Inspector-only recovery removed the final
+resource.
+
+**Network teardown is complete:** all 50 managed resources were destroyed.
+Final state and live API checks confirm zero demo EKS, RDS, nodes, interface
+endpoints, NAT gateways, Transit Gateways and firewalls. Both demo states are
+empty and the backup vault is gone. All member accounts remain ACTIVE;
+organization RAM onboarding, governance, observability and backend state are
+retained. CloudTrail is logging, and the OAM sink, both source links and five
+central alarms remain present.
+
+The demonstrated hourly layers have been removed. Retained baseline services,
+KMS deletion windows and storage can still generate charges; check billing after
+reporting catches up. Follow the [completion runbook](docs/completion.md) for verification and
+future demo lifecycle guidance.
+
+LLM gateway integration is cancelled and was never deployed. Provider domains and gateway output
+contracts have been removed from configuration. Network allowlist edits were not
+applied before the hub was removed; workload integration resources have also
+been removed. Legacy state-history cleanup is complete: 20 obsolete gateway
+versions were deleted and the latest clean state retained. Retiring the old
+gateway provider keys remains separate unfinished work.
+
+The secrets scanner is live in the security account (a few dollars a month): seven
+metadata-only target roles plus its own, a cross-account scan that assumed into
+every member account, and a positive control where an empty secret created in
+sandbox was inventoried and flagged. See [docs/secrets-lifecycle.md](docs/secrets-lifecycle.md).

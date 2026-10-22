@@ -1,69 +1,114 @@
 # AWS Landing Zone
 
-**Infra pipeline status:** proven live and torn down on 2026-10-15. The network,
-workload and delivery roots now plan on every pull request with a read-only
-member role, apply on merge behind a reviewer-gated environment, replan to prove
-a second plan is empty, and destroy through a gated workflow with a post-destroy
-hourly check. The first live runs caught two real defects, both failed safe. See
-[Infra pipeline](#infra-pipeline) and
-[ADR-0004](docs/adr/0004-gated-infra-pipeline.md).
+A Terraform AWS landing zone: an eight-account organization with inherited
+guardrails, centralized audit and detection, a shared Transit Gateway that sends
+all workload egress through Network Firewall, and a private EKS and Multi-AZ
+PostgreSQL reference workload. The hourly layers build and tear down through a
+reviewer-gated CI pipeline. It is one of three isolated landing zones (AWS,
+Azure, GCP) built to the same design.
 
-**Compute baseline status:** deployed, proven and destroyed on 2026-10-06. The
-compute guardrails are live on the Sandbox and Workloads OUs
-(`scripts/test-guardrails.sh` 20/20, dry-run denials in sandbox and prod). In one
-session the prod defaults, the golden AMI pipeline, SSM patching and the private
-management instance were applied alongside the full EKS and RDS workload, then
-torn down: `test-data-tier.sh` 5/5, golden AMI test phase `HARDENING_OK` after a
-reboot, `scripts/test-compute.sh` 17/17, `scripts/verify-teardown.sh` clean. See
-[docs/compute-baseline.md](docs/compute-baseline.md) for the run and the fixes
-the first live bake forced.
-Existing verification below covers the earlier EKS/RDS and network demo.
+![AWS landing zone overview](docs/overview.png)
 
-**Incident tooling status:** deployed, proven and torn down on 2026-10-06. The forensics
-runbook and finding routing stay up as standing controls in the security account. Drills
-and a forced-alarm remediation with an RDS failover passed; the live run found two real
-bugs (an evidence step that ran before the snapshot finished, and an SCP that made a
-resource undestroyable). A second responder session on 2026-10-17 proved the standing
-uptime alarm reaches the inbox as notify-only, with an incident summary written by Amazon
-Nova Lite in a real run. Claude was dropped for the summary: this account cannot call it
-in-region. The responder was destroyed again afterwards. See
-[docs/incident-response.md](docs/incident-response.md).
+The retained foundation (blue) stays up between sessions and costs a few dollars
+a month. Every member account inherits its SCPs. The network and prod layers
+(orange) bill by the hour, so the pipeline builds them for a proof and destroys
+them afterwards. The prod VPC has no NAT gateway or internet gateway of its own:
+its only way out is the Transit Gateway, the firewall's domain allowlist and the
+hub NAT. The [full diagram](#full-diagram) shows every control and account.
 
-**Standing controls status:** `uptime/`, `backup-verify/` and `remediation/` were
-deployed on 2026-10-16 and stay up. Their failure proofs ran on 2026-10-17: a failing
-uptime check alarms, an empty backup bucket alarms, and remediation was proven with forced
-alarms and with real CPU load in dry run. A synthetic heartbeat now writes to the landing
-bucket every 6 hours. A stale backup object alarming is **not proven yet**. See
-[docs/standing-controls.md](docs/standing-controls.md).
+## The problem
 
-**Warm standby status:** the us-west-2 data-tier standby was deployed, proven and
-destroyed on 2026-10-07. `scripts/test-standby.sh` passed 8 of 8: encrypted cross-region
-replica on a multi-region key, replication, DNS failover, and automated replica promotion.
-A full second hub was designed and not built. See
-[docs/warm-standby-design.md](docs/warm-standby-design.md).
+AWS estates that grow without a landing zone end up in the same place.
+Workloads share accounts, so a mistake in dev can reach prod data. Root
+credentials get used. Each account keeps its own CloudTrail, or none, so "who
+did that" has no single answer. VPCs reach the internet through their own NAT
+gateways with nothing inspecting what leaves. Demo infrastructure that bills by
+the hour gets forgotten.
 
+This repo makes those decisions once, at the organization: an account per tier,
+SCPs that member accounts cannot opt out of, one organization trail into a
+locked bucket, one inspected egress path, and a pipeline where nothing billable
+comes up without a reviewer approving it.
 
-The public repository is
-[jordann6/aws-landing-zone](https://github.com/jordann6/aws-landing-zone).
-State moved to a dedicated backend under `aws-landing-zone/` keys
-([State backend](#state-backend)). Resource tags carry
-`Project = aws-landing-zone`.
+## Key decisions
 
-A Terraform AWS landing zone with a persistent multi-account organization,
-inherited guardrails, centralized audit and security controls, and an inspected
-private workload network. The reference workload is private EKS and Multi-AZ
-PostgreSQL. Application integration is outside the completion scope.
+**Bespoke Terraform instead of Control Tower and the Landing Zone Accelerator.**
+The accelerator would stand up most of the governance from a config file, and in
+a real organization it is usually the right base. Here every SCP, key policy and
+route is hand-written so each control is visible in code review, the hourly
+layers can be destroyed on their own, and the same design can be built on Azure
+and GCP side by side. Full reasoning:
+[accelerator-vs-bespoke](docs/accelerator-vs-bespoke.md).
 
-![AWS landing-zone architecture and resource lifecycle](docs/architecture.png)
+**Centralized egress inspection on a shared Transit Gateway.** Prod has no NAT
+or IGW. Egress goes through the TGW to an inspection VPC in the network account,
+through Network Firewall's domain allowlist, then the hub NAT. That gives one
+chokepoint to log and police, at the price of a hub every spoke depends on.
 
-The diagram shows the infrastructure design and configured relationships, not a
-running application or proof of traffic. Blue clusters are retained: the organization,
-governance, observability and the standing controls. Orange clusters are temporary: the
-network, workload, compute and delivery layers, the incident responder and the us-west-2
-standby, all destroyed after their proofs. The grey cluster is the GitHub pipeline. The
-responder's ops-alarms node is the shared-services topic, drawn again inside the
-responder. Dev, test and sandbox accounts exist without deployed spoke VPCs. Cross-region
-backup is disabled; the standby uses a cross-region RDS replica.
+**Split plan and apply identities in CI.** A pull request can only reach a
+read-only plan role. The write role exists only inside a reviewer-gated
+environment, and IAM trust (not the workflow file) enforces that pairing. The
+apply replays the exact plan the reviewer approved, then replans every root and
+fails if the second plan is not empty. The rejected shortcut was letting the
+plan role assume `OrganizationAccountAccessRole`, which would have made
+"read-only" admin from any PR. [ADR-0004](docs/adr/0004-gated-infra-pipeline.md).
+
+**Reboot is the only automated remediation.** The standing remediation Lambda
+reboots only instances tagged `Monitored=true`, and the IAM permission carries
+the same tag condition, so a bug in one layer cannot widen the other. A 15
+minute cooldown and a circuit breaker after 3 attempts in an hour stop a
+flapping alarm from becoming a reboot loop. It runs in dry run by default.
+[ADR-0005](docs/adr/0005-remediation-safety-model.md).
+
+**Retained versus temporary layers.** The organization, governance and
+observability stay up. Network, workload and delivery cost about $1.16 an hour,
+so they live in their own roots and are destroyed after each proof. Terraform
+state sits in a dedicated, KMS-encrypted backend that no plan can delete
+([ADR-0003](docs/adr/0003-dedicated-state-backend.md)).
+
+## What the live runs found
+
+Plans, unit tests and the static gates passed on all of these. Each one only
+showed up against the real organization.
+
+1. **The CI roles could never have been assumed.** This repository's OIDC
+   tokens carry immutable subjects (`repo:owner@id/repo@id:...`), and the trust
+   policies matched the plain `repo:owner/repo:...` form. Nothing had noticed because nothing credentialed had ever
+   run. Found while designing the pipeline, fixed in `bootstrap/` before the
+   first run.
+2. **Every gated apply was silently skipped.** The `setup-terraform` wrapper
+   reports exit code 2 from `plan -detailed-exitcode` as 0, so "has changes" was
+   always false. Network planned 50 resources and applied none. Fixed in
+   platform-guardrails v1.7.1 by turning the wrapper off in plan steps, with a
+   self-test that asserts codes 2 and 0 come through.
+3. **A role re-created its own log group after teardown.** The hub flow-log role
+   held `logs:CreateLogGroup`, so log delivery recreated `/vpc/hub-flow` outside
+   Terraform after a destroy. The next apply stopped at 47 of 50 resources with
+   `ResourceAlreadyExistsException`. The permission was removed.
+4. **Forensics captured evidence before the snapshot existed.** The runbook
+   copied the snapshot while it was still `pending`. Containment had already
+   worked, so the drill failed only at evidence. Fixed with a `SnapshotNotReady`
+   retry.
+5. **An SCP made a resource impossible to destroy.** The Workloads OU denies
+   `ec2:DisableEbsEncryptionByDefault`, so destroying the EBS encryption default
+   failed. The declarative policy already owns that setting, so the workload root
+   now drops it with a `removed` block instead of a manual `terraform state rm`.
+6. **The hourly cost alarm never fired.** The TTL guard runs on GitHub's cron,
+   which delays or drops scheduled runs. The gated destroy and its post-destroy
+   check are the real control; the TTL guard is a backstop.
+
+## Status
+
+| Layer | State | Last run |
+|---|---|---|
+| Organization, governance, observability | Retained | Continuous |
+| Infra pipeline (network, workload, delivery) | Proven through CI, destroyed | 2026-10-15 |
+| Compute baseline | Proven, destroyed; guardrails stay live on the Sandbox and Workloads OUs | 2026-10-06 |
+| Incident tooling | Proven, responder destroyed; forensics runbook and finding routing retained | 2026-10-17 |
+| Standing controls (`uptime/`, `backup-verify/`, `remediation/`) | Retained; failure proofs passed except the stale-backup alarm | 2026-10-17 |
+| Warm standby (us-west-2) | Proven, destroyed; a second hub was designed, not built | 2026-10-07 |
+
+Closeout records for each teardown are in [docs/completion.md](docs/completion.md).
 
 ## Proven in live runs
 
@@ -99,49 +144,18 @@ repositories with their own history and a landing-zone mode:
 The portfolio write-up is the AWS Landing Zone case study at
 [jordandesigns.io](https://jordandesigns.io).
 
-## Current status and remaining work
+## Full diagram
 
-Before teardown, Phase C verification recorded **50 network resources and 85
-workload resources deployed** in `us-east-1`. Network Firewall was READY and
-IN_SYNC, both RAM associations were ASSOCIATED, and prod could see the shared
-Transit Gateway.
-EKS 1.35 and its two-node AL2023 group were ACTIVE. PostgreSQL 16.14 was available,
-private, encrypted and Multi-AZ. Private endpoints and TGW routing were verified.
-These checks establish infrastructure state and configuration. Forced database
-failover was demonstrated later by the incident tooling; end-to-end firewall traffic
-has not been demonstrated.
+![AWS landing-zone architecture and resource lifecycle](docs/architecture.png)
 
-**Workload teardown is complete.** Live checks confirm zero workload state
-resources, EKS clusters, nodes, RDS instances and prod interface endpoints, with
-the backup vault and app repository gone. The initial apply removed 84 resources
-but timed out disabling Inspector; an Inspector-only recovery removed the final
-resource. The diagram above records the demonstrated design, not current live
-workload inventory.
-
-**Network teardown is complete:** all 50 managed resources were destroyed.
-Final state and live API checks confirm zero demo EKS, RDS, nodes, interface
-endpoints, NAT gateways, Transit Gateways and firewalls. Both demo states are
-empty and the backup vault is gone. All member accounts remain ACTIVE;
-organization RAM onboarding, governance, observability and backend state are
-retained. CloudTrail is logging, and the OAM sink, both source links and five
-central alarms remain present.
-
-The demonstrated hourly layers have been removed. Retained baseline services,
-KMS deletion windows and storage can still generate charges; check billing after
-reporting catches up. Follow the [completion runbook](docs/completion.md) for verification and
-future demo lifecycle guidance. Commit, push and merge only when requested.
-
-LLM gateway integration is cancelled and was never deployed. Provider domains and gateway output
-contracts have been removed from configuration. Network allowlist edits were not
-applied before the hub was removed; workload integration resources have also
-been removed. Legacy state-history cleanup is complete: 20 obsolete gateway
-versions were deleted and the latest clean state retained. Retiring the old
-gateway provider keys remains separate unfinished work.
-
-The secrets scanner is live in the security account (a few dollars a month): seven
-metadata-only target roles plus its own, a cross-account scan that assumed into
-every member account, and a positive control where an empty secret created in
-sandbox was inventoried and flagged. See [docs/secrets-lifecycle.md](docs/secrets-lifecycle.md).
+The diagram shows the infrastructure design and configured relationships, not a
+running application or proof of traffic. Blue clusters are retained: the organization,
+governance, observability and the standing controls. Orange clusters are temporary: the
+network, workload, compute and delivery layers, the incident responder and the us-west-2
+standby, all destroyed after their proofs. The grey cluster is the GitHub pipeline. The
+responder's ops-alarms node is the shared-services topic, drawn again inside the
+responder. Dev, test and sandbox accounts exist without deployed spoke VPCs. Cross-region
+backup is disabled; the standby uses a cross-region RDS replica.
 
 ## Account and policy boundaries
 
@@ -339,6 +353,19 @@ management `gha-plan` or `gha-apply`, which each chain into exactly one matching
 role in the member accounts. The accounts, governance, bootstrap and
 observability roots stay operator-applied, so CI can never rewrite its own trust.
 
+## What changes at production scale
+
+- **Control Tower and the Landing Zone Accelerator at the base,** keeping only
+  the custom SCPs, the inspection design and the paved-road modules on top.
+- **A multi-AZ inspection path.** The demo firewall and NAT sit in one
+  availability zone.
+- **Separate reviewers.** One maintainer approves every gate here.
+- **An AWS-side backstop for forgotten stacks,** such as a Budgets action or an
+  EventBridge schedule, instead of relying on GitHub's cron.
+- **A deployed application,** to prove the app-to-database path and end-to-end
+  firewall traffic, neither of which is demonstrated yet.
+- **Cross-region backup copy,** which is disabled in the demo.
+
 ## Documentation
 
 - [Completion runbook](docs/completion.md): completed teardown, verification and closeout steps.
@@ -353,4 +380,4 @@ observability roots stay operator-applied, so CI can never rewrite its own trust
 - [State backend decision](docs/adr/0003-dedicated-state-backend.md): dedicated, KMS-encrypted backend instead of the shared bucket.
 - [Gated infra pipeline](docs/adr/0004-gated-infra-pipeline.md): split plan and apply identities across accounts, reviewed-plan replay, second-plan check, the live proof and the two defects it caught.
 - [Architecture decision](docs/accelerator-vs-bespoke.md): bespoke Terraform versus Control Tower and Landing Zone Accelerator.
-- [Diagram source](docs/diagram.py): official AWS icons via the mingrammer `diagrams` library. Regenerate with `python3 docs/diagram.py` after installing `diagrams` and Graphviz.
+- [Overview diagram source](docs/overview.py) and [full diagram source](docs/diagram.py): official AWS icons via the mingrammer `diagrams` library. Regenerate with `python3 docs/diagram.py` after installing `diagrams` and Graphviz.
