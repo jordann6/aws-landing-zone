@@ -117,6 +117,14 @@ data "aws_iam_policy_document" "plan_permissions" {
     actions   = ["sts:AssumeRole"]
     resources = local.member_role_arns.plan
   }
+  # The accounts/ root's aws_ram_sharing_with_organization refreshes by reading
+  # RAM's service-linked role, so the scheduled drift check needs this one
+  # GetRole. Scoped to that role alone.
+  statement {
+    sid       = "ReadRamServiceLinkedRole"
+    actions   = ["iam:GetRole"]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/ram.amazonaws.com/AWSServiceRoleForResourceAccessManager"]
+  }
 }
 
 resource "aws_iam_role" "gha_plan" {
