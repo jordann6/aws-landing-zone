@@ -1,0 +1,33 @@
+name: Drift detection
+
+# Scheduled refresh-only plan of the accounts/ root (org, OUs, member accounts,
+# SCPs, tag policies) with the read-scoped gha-plan role. Drift opens or updates
+# one `drift` issue; the next clean run closes it.
+#
+# Only accounts/ is checked. The other persistent roots reach member accounts
+# through OrganizationAccountAccessRole, which gha-plan cannot assume, and the
+# hourly roots are usually destroyed. gha-plan's trust admits ref main, which is
+# what schedule and workflow_dispatch runs on main present.
+#
+# Pinned to one platform-guardrails SHA with the tag in a comment, and the same
+# SHA is passed as guardrails_ref (see guardrails.yml).
+on:
+  schedule:
+    - cron: "17 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  accounts:
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-drift.yml@4ad2ee28fcb341d58ed06b1d072729c710a141e9 # v1.8.0
+    with:
+      guardrails_ref: 4ad2ee28fcb341d58ed06b1d072729c710a141e9
+      terraform_dir: accounts
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      aws_region: us-east-1
