@@ -25,9 +25,13 @@ jobs:
       contents: read
       id-token: write
       issues: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-drift.yml@4ad2ee28fcb341d58ed06b1d072729c710a141e9 # v1.8.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-drift.yml@c13311e2cc20b48af292d067e0b936f43116e257 # v1.8.1
     with:
-      guardrails_ref: 4ad2ee28fcb341d58ed06b1d072729c710a141e9
+      guardrails_ref: c13311e2cc20b48af292d067e0b936f43116e257
       terraform_dir: accounts
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
+    # org_email_domain lives in the gitignored accounts/terraform.tfvars; the
+    # secret holds that file so the refresh has every required variable.
+    secrets:
+      TF_VARS: ${{ secrets.ACCOUNTS_TFVARS }}
