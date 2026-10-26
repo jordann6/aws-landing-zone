@@ -104,6 +104,7 @@ real organization.
 |---|---|---|
 | Organization, governance, observability | Retained | Continuous |
 | Infra pipeline (network, workload, delivery) | Proven through CI, destroyed | 2026-10-15 |
+| Drift detection (`accounts/`) | Live, daily; proven by a hand-edited tag | 2026-10-26 |
 | Compute baseline | Proven, destroyed; guardrails stay live on the Sandbox and Workloads OUs | 2026-10-06 |
 | Incident tooling | Proven, responder destroyed; forensics runbook and finding routing retained | 2026-10-17 |
 | Standing controls (`uptime/`, `backup-verify/`, `remediation/`) | Retained; failure proofs passed except the stale-backup alarm | 2026-10-17 |
@@ -120,6 +121,7 @@ the earlier layers, and by CI behind reviewer gates for the infra pipeline.
 | Layer | What was proven | Where |
 |---|---|---|
 | Infra pipeline | 196 resources applied through CI across three roots (network 50, workload 116, delivery 30) over two runs, the first stopping safely at 47 of 50 network resources on a defect; second plan empty, gated destroy to empty state with the hourly check passing on each root | [ADR-0004](docs/adr/0004-gated-infra-pipeline.md) |
+| Drift detection | A hand-edited Sandbox OU tag failed the daily run and opened issue [#40](https://github.com/jordann6/aws-landing-zone/issues/40) naming the OU and its changed attributes; reverting the tag closed it on the next run, about 3 minutes end to end | [Drift detection](#drift-detection) |
 | Guardrails and compute | 20/20 guardrail denials, hardened golden AMI after reboot, private management instance 17/17 | [compute-baseline](docs/compute-baseline.md) |
 | Secrets scanner | Cross-account scan of all members, positive control flagged, value reads explicitly denied | [secrets-lifecycle](docs/secrets-lifecycle.md) |
 | Incident tooling | Finding to forensics runbook, isolation drill with encrypted evidence, forced alarm to RDS failover in about 35 seconds; standing uptime alarm handled notify-only with an Amazon Nova Lite summary | [incident-response](docs/incident-response.md) |
@@ -316,6 +318,40 @@ windows, Secrets Manager recovery windows, retained storage and baseline service
 can leave residual charges after the hourly layers are gone. Check billing after
 the reporting data catches up.
 
+## Drift detection
+
+A gated apply proves the code and the cloud agreed at merge time. It says nothing
+about a console change made afterward. `drift.yml` runs the shared
+[`tf-drift.yml`](https://github.com/jordann6/platform-guardrails#drift-detection)
+on `accounts/` daily at 13:17 UTC and on dispatch: a `plan -refresh-only
+-detailed-exitcode` with the read-only `gha-plan` role and `-lock=false`, so it
+never writes state or holds the lock. Drift opens one `drift` issue listing each
+changed resource and attribute name (never values), later runs update it, and the
+first clean run closes it.
+
+| Run | Result |
+|---|---|
+| [Baseline](https://github.com/jordann6/aws-landing-zone/actions/runs/40344631473) | Clean |
+| [Sandbox OU `Owner` tag set to `drift-test` by hand](https://github.com/jordann6/aws-landing-zone/actions/runs/40344972201) | Failed, opened [#40](https://github.com/jordann6/aws-landing-zone/issues/40): `aws_organizations_organizational_unit.sandbox (update): tags, tags_all` |
+| [Tag reverted](https://github.com/jordann6/aws-landing-zone/actions/runs/40345147735) | Clean, closed #40 |
+
+Two things broke on the way:
+
+1. **A required variable lives in a gitignored file.** `org_email_domain` is in
+   `accounts/terraform.tfvars`, so the first run stopped on `No value for required
+   variable`. platform-guardrails v1.8.1 added an optional `TF_VARS` secret, written
+   to the runner's temp directory with mode 600 and passed with `-var-file`; this
+   repo stores the file as `ACCOUNTS_TFVARS`.
+2. **One resource needed a read the role did not have.** `gha-plan` could refresh
+   all 40 Organizations resources but not `aws_ram_sharing_with_organization`,
+   whose refresh reads the RAM service-linked role. bootstrap granted
+   `iam:GetRole` on that one role only.
+
+Only `accounts/` is checked. The other retained roots (governance, observability,
+secrets, uptime, backup-verify, remediation) reach member accounts through
+`OrganizationAccountAccessRole`, which `gha-plan` cannot assume. Covering them
+needs a read role in each member account, which is a deliberate limit for now.
+
 ## State backend
 
 Every root keeps state in a dedicated bucket that `bootstrap/state_backend.tf`
@@ -348,7 +384,8 @@ policy enforcement is disabled because its example tagging rules conflict with
 the organization's tag policy. Pricing estimates still use the Infracost API.
 
 The credentialed plan, gated apply, gated destroy and TTL guard are live for the
-network, workload and delivery roots; see [Infra pipeline](#infra-pipeline). CI
+network, workload and delivery roots; see [Infra pipeline](#infra-pipeline). A
+daily drift check runs on `accounts/`; see [Drift detection](#drift-detection). CI
 authenticates by GitHub OIDC with the immutable repository subject, into
 management `gha-plan` or `gha-apply`, which each chain into exactly one matching
 role in the member accounts. The accounts, governance, bootstrap and
