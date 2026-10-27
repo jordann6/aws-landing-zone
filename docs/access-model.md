@@ -1,9 +1,13 @@
 # Human access model
 
-How people get into this org. There are no IAM users. Every human is a member of
+How people get into this org. No human has an IAM user. Every human is a member of
 an Identity Center group, and a group is bound to a permission set in a specific
 account. Access is therefore a group membership plus a short-lived session, never
-a standing key. In production the groups are synced from an external IdP over
+a standing key. One exception is the automation identity: Terraform runs from a
+workstation as a single management-account IAM user, `terraform-user`, with one
+long-lived access key (created 2025-02-13), no console login and no MFA. CI uses
+OIDC roles instead. That key is a known gap, tracked for retirement. In production
+the groups are synced from an external IdP over
 SCIM; here they are created in the built-in identity store (`identity.tf`) so the
 matrix below is real.
 
@@ -39,7 +43,7 @@ just-in-time control, backed in CI by the reviewer-gated apply.
 
 | Design choice | CIS control |
 |---|---|
-| No IAM users, federated groups only | 1.10, 1.12 (no long-lived user credentials) |
+| No human IAM users, federated groups only | 1.10 for humans. 1.12 is not met while the `terraform-user` key exists |
 | Permissions boundaries on the engineer personas | 1.16 (no unconstrained `*:*` grant) |
 | Short `session_duration`, shortest on admin/break-glass | 1.12 (credentials are not long-lived) |
 | No standing prod write; admin is JIT | Least privilege / separation of duties |
