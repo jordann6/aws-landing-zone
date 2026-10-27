@@ -18,8 +18,8 @@ view; this table is the design-time intent behind that score.
 | 1.7 | Avoid root for daily tasks | `deny-root-user` SCP (`policies/deny-root-user.json`) blocks all root actions in members |
 | 1.8 | Password policy min length 14 | `aws_iam_account_password_policy.strict` |
 | 1.9 | Password reuse prevention | `aws_iam_account_password_policy.strict` (24) |
-| 1.10 | MFA for all IAM users | N/A: no IAM users; humans federate through Identity Center (`identity.tf`) |
-| 1.12 | No unused credentials | N/A: no static users; Identity Center sessions are short-lived (`session_duration`) |
+| 1.10 | MFA for all IAM users | Partial: humans have no IAM users and federate through Identity Center (`identity.tf`). The one automation user, `terraform-user`, has no console login and no MFA |
+| 1.12 | No unused credentials | Not met: `terraform-user` has one active access key created 2025-02-13. Humans use short-lived Identity Center sessions (`session_duration`). Retiring the key is open |
 | 1.16 | No full "*:*" policies attached | Delegated personas are capped by permissions boundaries (`aws_ssoadmin_permissions_boundary_attachment`) |
 | 1.20 | IAM Access Analyzer enabled | Service access enabled in `organization.tf`; analyzer rollout tracked as a follow-up |
 
