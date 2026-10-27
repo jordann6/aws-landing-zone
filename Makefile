@@ -82,6 +82,7 @@ deploy: ## Deploy accounts, governance, network + workload (hourly), observabili
 	 NET_ID=$$(terraform -chdir=$(TF_ACCT) output -raw network_account_id); \
 	 ORG_ARN=$$(terraform -chdir=$(TF_ACCT) output -raw organization_arn); \
 	 TGW_ID=$$(terraform -chdir=$(TF_NET) output -raw transit_gateway_id); \
+	 $(TF_WORK)/rotation/build.sh; \
 	 terraform -chdir=$(TF_WORK) init; \
 	 terraform -chdir=$(TF_WORK) apply \
 	   -var prod_account_id=$$PROD_ID \
@@ -171,6 +172,7 @@ destroy: ## Tear down everything except the persistent accounts, then verify
 	-@PROD_ID=$$(terraform -chdir=$(TF_ACCT) output -raw prod_account_id); \
 	  NET_ID=$$(terraform -chdir=$(TF_ACCT) output -raw network_account_id); \
 	  TGW_ID=$$(terraform -chdir=$(TF_NET) output -raw transit_gateway_id); \
+	  $(TF_WORK)/rotation/build.sh; \
 	  terraform -chdir=$(TF_WORK) destroy \
 	    -var prod_account_id=$$PROD_ID \
 	    -var network_account_id=$$NET_ID \

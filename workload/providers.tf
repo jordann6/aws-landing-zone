@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.8"
+    }
   }
 
   # Its own state. This is the paved-road prod workload (data tier + EKS): the

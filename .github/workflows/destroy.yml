@@ -33,39 +33,40 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: delivery
       environment: destroy
       aws_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       check_only: false
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
 
   workload:
     needs: delivery
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: workload
+      build_command: ./rotation/build.sh
       environment: destroy
       aws_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       check_only: false
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
 
   network:
     needs: workload
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-destroy.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: network
       environment: destroy
       aws_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       check_only: false
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397

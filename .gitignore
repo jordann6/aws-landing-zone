@@ -39,6 +39,9 @@ HANDOFF.md
 # standby proof build artifacts
 standby/build/
 
+# workload/rotation/build.sh output (staged package and the plan-time zip)
+workload/build/
+
 # Lambda packages built by archive_file at plan time
 uptime/*.zip
 backup-verify/*.zip

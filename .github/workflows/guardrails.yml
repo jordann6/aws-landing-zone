@@ -11,11 +11,14 @@ on:
 # cloud token. The credentialed `plan` job below carries its own scoped
 # permissions on the job, never at file level.
 # Version pins: every reusable-workflow call in this repo (here, apply.yml,
-# destroy.yml and ttl-guard.yml) pins platform-guardrails to one commit SHA with
+# destroy.yml and ttl-guard.yml) pins platform-guardrails to a commit SHA with
 # the tag in a comment, and passes the same SHA as guardrails_ref so the scripts
 # and policies it checks out match the reviewed workflow. v1.7.0 adds the
 # ephemeral TF_VAR_ci_stage hand-off and has_changes (ADR-0004); v1.7.1 makes
-# has_changes report correctly (setup-terraform wrapper off).
+# has_changes report correctly (setup-terraform wrapper off). The credentialed
+# tf-plan, tf-apply and tf-destroy calls are on v1.9.0, whose build_command
+# lets the workload root build its rotation Lambda zip before planning; the
+# static tf-ci jobs and ttl-guard's check-only destroy never plan and stay put.
 permissions:
   contents: read
 
@@ -117,8 +120,9 @@ jobs:
       guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
       terraform_dir: remediation
 
-  # Behavior tests for the three standing roots' Lambdas. Credential-free: AWS
-  # clients are stubbed and DynamoDB is an in-memory fake.
+  # Behavior tests for the three standing roots' Lambdas and the workload's rotation
+  # package. Credential-free: AWS clients are stubbed, DynamoDB is an in-memory fake,
+  # and PostgreSQL is stubbed behind the real psycopg2 (pinned like the package).
   python_tests:
     runs-on: ubuntu-latest
     permissions:
@@ -130,8 +134,8 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.13"
-      - run: python -m pip install --quiet boto3 pytest
-      - run: python -m pytest uptime/tests backup-verify/tests remediation/tests -q
+      - run: python -m pip install --quiet boto3 pytest psycopg2-binary==2.9.13
+      - run: python -m pytest uptime/tests backup-verify/tests remediation/tests workload/rotation/tests -q
 
   # The FinOps allocation policy (CostCenter) already runs inside `static`, since
   # tf-ci.yml evaluates the whole shared policy/ set. These jobs add the cost
@@ -231,13 +235,13 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: network
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
       enable_infracost: false
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
 
   plan_workload:
     needs: upstream
@@ -246,13 +250,14 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: workload
+      build_command: ./rotation/build.sh
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
       enable_infracost: false
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
 
   plan_delivery:
     needs: upstream
@@ -261,10 +266,10 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@24e7f31e26b1243dd367544310259a47c9d37e84 # v1.7.1
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: delivery
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
       enable_infracost: false
-      guardrails_ref: 24e7f31e26b1243dd367544310259a47c9d37e84
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
