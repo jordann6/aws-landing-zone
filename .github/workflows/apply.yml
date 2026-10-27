@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: network
       environment: prod-apply
@@ -50,22 +50,23 @@ jobs:
       apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       skip_apply_when_unchanged: true
-      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
 
   workload:
     needs: network
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: workload
+      build_command: ./rotation/build.sh
       environment: prod-apply
       plan_role_arn: arn:aws:iam::692859913278:role/gha-plan
       apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       skip_apply_when_unchanged: true
-      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
 
   # The deployment contract is not published here: release-guard reads it from
   # SSM in the prod account, and these jobs hold management-account credentials.
@@ -75,7 +76,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: delivery
       environment: prod-apply
@@ -83,7 +84,7 @@ jobs:
       apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
       aws_region: us-east-1
       skip_apply_when_unchanged: true
-      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
 
   # ---- Second plan: must be empty ----------------------------------------------
   replan_network:
@@ -92,12 +93,12 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: network
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
-      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
 
   replan_workload:
     needs: delivery
@@ -105,12 +106,13 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: workload
+      build_command: ./rotation/build.sh
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
-      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
 
   replan_delivery:
     needs: delivery
@@ -118,12 +120,12 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@4447265297e54d66d567bf3d894ee9a60c8b1bc1 # v1.7.2
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@6b716834c69634d4fcd050f440ea5f2c7b52c397 # v1.9.0
     with:
       terraform_dir: delivery
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
-      guardrails_ref: 4447265297e54d66d567bf3d894ee9a60c8b1bc1
+      guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
 
   no_drift:
     name: Second plan is empty
