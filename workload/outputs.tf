@@ -106,3 +106,18 @@ output "eks_node_group_name" {
 output "rds_instance_id" {
   value = var.enable_rds ? aws_db_instance.prod[0].identifier : null
 }
+
+# ---- secret rotation (read by scripts/rotation-bootstrap.sh and rotation-proof.sh) --
+
+output "reporting_secret_arn" {
+  description = "orders_reporting credential, rotated with alternating users"
+  value       = var.enable_rds ? aws_secretsmanager_secret.reporting[0].arn : null
+}
+
+output "rotation_lambda_arn" {
+  value = var.enable_rds ? aws_lambda_function.rotation[0].arn : null
+}
+
+output "reporting_load_lambda_name" {
+  value = var.enable_rds ? aws_lambda_function.load[0].function_name : null
+}

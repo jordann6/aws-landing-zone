@@ -64,6 +64,19 @@ resource "aws_security_group" "db" {
     }
   }
 
+  # The password-auth clients: the rotation function and the reporting load
+  # client (secrets-rotation.tf).
+  dynamic "ingress" {
+    for_each = var.enable_rds ? [1] : []
+    content {
+      description     = "PostgreSQL from the rotation function and reporting client"
+      from_port       = local.db_port
+      to_port         = local.db_port
+      protocol        = "tcp"
+      security_groups = [aws_security_group.rotation[0].id]
+    }
+  }
+
   egress {
     description = "Responses to the app tier"
     from_port   = 0
