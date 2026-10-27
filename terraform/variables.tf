@@ -51,6 +51,17 @@ variable "enable_identity_center" {
   default     = true
 }
 
+variable "operator_user" {
+  description = "The human operator's Identity Center user, added to the admin persona group. Null creates no user. Set it in terraform.tfvars (gitignored), not in committed files: it holds an email address."
+  type = object({
+    user_name   = string
+    given_name  = string
+    family_name = string
+    email       = string
+  })
+  default = null
+}
+
 # --- Reduced-footprint toggles -----------------------------------------------
 # The canonical landing zone deploys all of these (defaults true). In an org that
 # is at its account-count limit or already runs a shared Security Hub / cost

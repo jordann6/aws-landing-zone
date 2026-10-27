@@ -8,6 +8,15 @@ budget_notification_email = "you@example.com"
 # or set this false to skip the persona layer.
 # enable_identity_center = true
 
+# OPTIONAL. The operator's own Identity Center user, added to the admin group, so
+# the workstation can sign in with short-lived sessions instead of an access key.
+# operator_user = {
+#   user_name   = "you"
+#   given_name  = "Given"
+#   family_name = "Family"
+#   email       = "you@example.com"
+# }
+
 # --- Reduced-footprint toggles (canonical design leaves ALL true) -------------
 # Set a flag false only when the target org cannot support that piece. The
 # account set and tag policy toggles are in accounts/example.tfvars.
