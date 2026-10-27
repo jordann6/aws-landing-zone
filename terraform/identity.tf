@@ -167,3 +167,33 @@ resource "aws_ssoadmin_account_assignment" "persona" {
   target_id   = local.accounts[each.value.account]
   target_type = "AWS_ACCOUNT"
 }
+
+# The operator's own login, so the Terraform workstation can use short-lived
+# Identity Center sessions instead of the long-lived terraform-user access key.
+# The user gets the admin persona and nothing else; MFA and the password are set
+# once in the access portal, which Terraform cannot do.
+resource "aws_identitystore_user" "operator" {
+  count = local.idc_enabled && var.operator_user != null ? 1 : 0
+
+  identity_store_id = local.identity_store
+  user_name         = var.operator_user.user_name
+  display_name      = "${var.operator_user.given_name} ${var.operator_user.family_name}"
+
+  name {
+    given_name  = var.operator_user.given_name
+    family_name = var.operator_user.family_name
+  }
+
+  emails {
+    value   = var.operator_user.email
+    primary = true
+  }
+}
+
+resource "aws_identitystore_group_membership" "operator_admin" {
+  count = local.idc_enabled && var.operator_user != null ? 1 : 0
+
+  identity_store_id = local.identity_store
+  group_id          = aws_identitystore_group.persona["admin"].group_id
+  member_id         = aws_identitystore_user.operator[0].user_id
+}
