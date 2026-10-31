@@ -42,9 +42,9 @@ variable "noncurrent_expire_days" {
 }
 
 variable "freshness_alarm_enabled" {
-  description = "Alarm when the newest object is older than max_age_hours. Leave false until a producer writes here; cold data would alarm forever."
+  description = "Alarm when the newest object is older than max_age_hours. Needs a producer writing here (the heartbeat); cold data would alarm forever."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "log_retention_days" {

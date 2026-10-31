@@ -107,7 +107,7 @@ real organization.
 | Drift detection (`accounts/`) | Live, daily; proven by a hand-edited tag | 2026-10-26 |
 | Compute baseline | Proven, destroyed; guardrails stay live on the Sandbox and Workloads OUs | 2026-10-06 |
 | Incident tooling | Proven, responder destroyed; forensics runbook and finding routing retained | 2026-10-17 |
-| Standing controls (`uptime/`, `backup-verify/`, `remediation/`) | Retained; failure proofs passed except the stale-backup alarm | 2026-10-17 |
+| Standing controls (`uptime/`, `backup-verify/`, `remediation/`) | Retained; failure proofs passed, including the stale-backup alarm | 2026-10-17 |
 | Warm standby (us-west-2) | Proven, destroyed; a second hub was designed, not built | 2026-10-07 |
 
 Closeout records for each teardown are in [docs/completion.md](docs/completion.md).
@@ -128,7 +128,7 @@ the earlier layers, and by CI behind reviewer gates for the infra pipeline.
 | Standing controls | Failing uptime check alarms; empty backup bucket alarms; heartbeat producer writes to the bucket; remediation dry run, reboot, cooldown, unmonitored skip and circuit breaker, plus real CPU load raising the alarm in dry run | [standing-controls](docs/standing-controls.md) |
 | Warm standby | us-west-2 replica on a multi-region key, DNS failover, automated promotion, 8/8 checks | [warm-standby-design](docs/warm-standby-design.md) |
 
-Not proven, stated plainly: a stale backup object raising the freshness alarm, a real
+Not proven, stated plainly: a real
 reboot following real CPU load (only dry run so far), restore of a real backup,
 end-to-end firewall traffic, and a live listing of us-west-2 after the standby was
 destroyed (Terraform's destroy and empty state are the evidence).
@@ -199,7 +199,7 @@ The last three are described in [standing-controls](docs/standing-controls.md) a
 2026-10-16; the uptime, backup and remediation failure proofs ran 2026-10-17 (remediation
 with forced alarms: dry run, reboot, cooldown, unmonitored skip and circuit breaker; then real
 CPU load raised the alarm on its own and drew a dry-run notice), and ADR-0005 is accepted.
-The heartbeat producer followed the same day. The stale-object alarm proof is pending.
+The heartbeat producer followed the same day. The stale-object alarm was proven on 2026-10-30: the heartbeat was paused, the alarm raised at 41.1 hours and published to ops-alarms.
 
 Phase A observability is included in this repository. Its shared-services
 CloudWatch OAM sink, prod/network links, central alarms and security findings
