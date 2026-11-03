@@ -53,9 +53,9 @@ variable "log_retention_days" {
 }
 
 variable "heartbeat_enabled" {
-  description = "Run the synthetic heartbeat producer. Set false to pause it and prove the stale alarm."
+  description = "Run the synthetic heartbeat producer. Off by default: it proves the check and the alarm, not a real backup. Set true to prove the fresh direction."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "heartbeat_prefix" {
