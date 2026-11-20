@@ -43,6 +43,14 @@ output "prod_ou_id" {
   value = aws_organizations_organizational_unit.prod.id
 }
 
+output "suspended_ou_id" {
+  value = aws_organizations_organizational_unit.suspended.id
+}
+
+output "deployments_ou_id" {
+  value = aws_organizations_organizational_unit.deployments.id
+}
+
 output "sandbox_account_id" {
   value = aws_organizations_account.sandbox.id
 }
