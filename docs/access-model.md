@@ -39,11 +39,97 @@ just-in-time control, backed in CI by the reviewer-gated apply.
 | security | | yes | yes | yes | yes | |
 | break-glass | yes (sealed) | | | | | |
 
+## External identity provider (production design)
+
+In this repo the seven persona groups live in Identity Center's built-in identity
+store, so the matrix above is real and testable without a second system. In
+production the source of truth is the company IdP (Entra ID or Okta). Identity
+Center stops owning people and groups and keeps owning only what it should,
+which is permission sets and which group gets which set in which account. No
+Managed AD or AD Connector is needed for this.
+
+### How it fits together
+
+1. **Sign-in (SAML 2.0).** Identity Center's identity source is set to "External
+   identity provider". Entra uses the gallery app "AWS IAM Identity Center"; Okta
+   has the equivalent app. Identity Center supplies its ACS URL and issuer, the
+   IdP supplies its metadata. MFA, device posture and sign-in risk are enforced
+   by the IdP before AWS ever sees the user.
+2. **Provisioning (SCIM).** Identity Center's automatic provisioning gives a SCIM
+   endpoint and a bearer token, which go into the IdP app. Only users and groups
+   assigned to that app are pushed. Entra syncs on a cycle of roughly 40 minutes
+   (on demand for a single user), so a joiner or leaver lands in AWS within one
+   cycle, and a leaver loses AWS access as soon as the IdP disables them because
+   sign-in fails at the IdP regardless of sync.
+3. **Authorization (unchanged).** The permission sets, session lengths, boundaries
+   and account assignments in `terraform/identity.tf` stay exactly as they are.
+   An account assignment binds a permission set to a group id; the only
+   difference is that the group now arrives over SCIM instead of being created
+   by Terraform.
+
+### Group to permission set mapping
+
+One IdP group per persona, named with a prefix so AWS-bound groups are obvious in
+the IdP. The persona and account columns come straight from `identity.tf`.
+
+| IdP group (synced over SCIM) | Identity Center permission set | Session | Accounts |
+|---|---|---|---|
+| `AWS-LZ-admin` | admin (AdministratorAccess) | 1h | management, prod (JIT) |
+| `AWS-LZ-platform-eng` | platform-eng (PowerUserAccess, boundary) | 4h | dev, test |
+| `AWS-LZ-junior-eng` | junior-eng (ReadOnlyAccess, boundary) | 4h | dev |
+| `AWS-LZ-manager` | manager (ViewOnlyAccess) | 2h | dev, test, prod |
+| `AWS-LZ-finops` | finops (Billing) | 2h | management |
+| `AWS-LZ-security` | security (SecurityAudit) | 2h | security, dev, test, prod |
+| none, see break-glass below | break-glass (AdministratorAccess) | 1h | management (sealed) |
+
+Just-in-time admin moves into the IdP as well. With Entra ID P2, Privileged
+Identity Management for Groups makes `AWS-LZ-admin` membership eligible rather
+than active, so an engineer activates it for an hour with a reason and an
+approval, then Identity Center's own 1-hour session applies on top. Okta's
+equivalent is an access request workflow on the group. The demo Azure tenant is
+Entra ID Free, which has neither Conditional Access nor PIM, so that part stays
+a design.
+
+### Break-glass cannot depend on the IdP
+
+When the identity source is external, Identity Center users from the built-in
+store can no longer sign in. A break-glass path that runs through Identity
+Center therefore fails in exactly the outage it exists for, an IdP or SAML
+failure. Production break-glass sits outside Identity Center: the management
+account root user with a hardware MFA key held in a safe, plus one IAM role
+whose trust requires that MFA, both alarmed on use by the existing root-activity
+EventBridge rule. The `break-glass` permission set here models the sealed,
+alarmed, short-session shape of it, not the IdP-independence.
+
+### Cutting over from this repo's identity store
+
+SCIM creates new groups with new group ids; it does not adopt the groups
+Terraform made. That is why the IdP groups carry their own `AWS-LZ-` names
+instead of reusing `admin`, `platform-eng` and the rest. The cutover is a
+replacement of each account assignment's principal, done through the gate.
+
+1. Create the `AWS-LZ-*` groups in the IdP, assign them to the AWS app, and let
+   SCIM push them.
+2. In `identity.tf`, look the synced groups up with an `aws_identitystore_group`
+   data source by display name and point `aws_ssoadmin_account_assignment`
+   `principal_id` at them. The plan replaces every assignment (old group out,
+   SCIM group in) and changes no permission set. Apply it through the gated
+   governance pipeline while the old groups still exist, so nobody loses access
+   mid-change.
+3. Add `removed` blocks with `lifecycle { destroy = false }` for
+   `aws_identitystore_group.persona`, `aws_identitystore_user.operator` and its
+   membership, then delete those leftovers by hand once nothing references them.
+   The operator becomes an IdP user in `AWS-LZ-admin`.
+4. Switch the identity source to the external IdP and sign in once per persona to
+   confirm each lands in the right accounts with the right session length.
+5. Rotate the SCIM bearer token before it expires (Identity Center tokens are
+   valid for one year) and alarm on provisioning errors in the IdP.
+
 ## Which CIS control each row satisfies
 
 | Design choice | CIS control |
 |---|---|
-| No human IAM users, federated groups only | 1.10 for humans. 1.12 is not met while the `terraform-user` key exists |
+| No human IAM users, federated groups only (external IdP over SAML + SCIM in production) | 1.10 for humans. 1.12 is not met while the `terraform-user` key exists |
 | Permissions boundaries on the engineer personas | 1.16 (no unconstrained `*:*` grant) |
 | Short `session_duration`, shortest on admin/break-glass | 1.12 (credentials are not long-lived) |
 | No standing prod write; admin is JIT | Least privilege / separation of duties |
