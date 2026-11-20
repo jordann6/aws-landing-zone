@@ -82,28 +82,35 @@ data "aws_iam_policy_document" "config_bucket" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceAccount"
-      values   = [local.security_account_id]
+      values   = local.config_source_accounts
     }
   }
 
-  statement {
-    sid       = "ConfigBucketPut"
-    effect    = "Allow"
-    actions   = ["s3:PutObject"]
-    resources = ["${aws_s3_bucket.config.arn}/AWSLogs/${local.security_account_id}/Config/*"]
-    principals {
-      type        = "Service"
-      identifiers = ["config.amazonaws.com"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "s3:x-amz-acl"
-      values   = ["bucket-owner-full-control"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceAccount"
-      values   = [local.security_account_id]
+  # Every recording account (security here, plus the org-wide recorders in
+  # config-org.tf) delivers under its own AWSLogs/<account-id>/ prefix. One
+  # statement per account keeps each to its own prefix; a single statement over
+  # all of them would let any listed account write under another's.
+  dynamic "statement" {
+    for_each = local.config_source_accounts
+    content {
+      sid       = "ConfigBucketPut${statement.value}"
+      effect    = "Allow"
+      actions   = ["s3:PutObject"]
+      resources = ["${aws_s3_bucket.config.arn}/AWSLogs/${statement.value}/Config/*"]
+      principals {
+        type        = "Service"
+        identifiers = ["config.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "s3:x-amz-acl"
+        values   = ["bucket-owner-full-control"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [statement.value]
+      }
     }
   }
 
