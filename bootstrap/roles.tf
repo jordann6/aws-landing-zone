@@ -204,6 +204,7 @@ data "aws_iam_policy_document" "apply_trust" {
 data "aws_iam_policy_document" "apply_permissions" {
   # checkov:skip=CKV_AWS_111:Most organizations:* actions do not support resource-level scoping; the reviewer-gated environment is the control (see comment above).
   # checkov:skip=CKV_AWS_356:Same: organizations:* and sts:GetCallerIdentity cannot be scoped to resources.
+  # checkov:skip=CKV_AWS_109:The governance root writes key policies, topic policies and Identity Center assignments for resources it creates, so their ARNs do not exist to scope to; the org-apply reviewer approving a saved plan is the constraint (ADR-0004 addendum).
   statement {
     sid       = "ManageOrganization"
     actions   = ["organizations:*"]
