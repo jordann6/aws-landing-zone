@@ -52,37 +52,47 @@ output "deployments_ou_id" {
 }
 
 output "sandbox_account_id" {
-  value = aws_organizations_account.sandbox.id
+  value = aws_organizations_account.this["sandbox"].id
 }
 
 # dev/prod/test/network/shared-services exist only when full_account_set is true;
-# one(...) yields null when the account is gated off.
+# try(...) yields null when the account is gated off.
 output "dev_account_id" {
-  value = one(aws_organizations_account.dev[*].id)
+  value = try(aws_organizations_account.this["dev"].id, null)
 }
 
 output "prod_account_id" {
-  value = one(aws_organizations_account.prod[*].id)
+  value = try(aws_organizations_account.this["prod"].id, null)
 }
 
 output "test_account_id" {
-  value = one(aws_organizations_account.test[*].id)
+  value = try(aws_organizations_account.this["test"].id, null)
 }
 
 output "security_account_id" {
-  value = aws_organizations_account.security.id
+  value = aws_organizations_account.this["security"].id
 }
 
 output "network_account_id" {
   description = "Consumed by the network/ root to assume into this account"
-  value       = one(aws_organizations_account.network[*].id)
+  value       = try(aws_organizations_account.this["network"].id, null)
 }
 
 output "shared_services_account_id" {
-  value = one(aws_organizations_account.shared_services[*].id)
+  value = try(aws_organizations_account.this["shared-services"].id, null)
 }
 
 output "log_archive_account_id" {
   description = "Consumed by the logging layer as the CloudTrail/Config destination"
-  value       = aws_organizations_account.log_archive.id
+  value       = aws_organizations_account.this["log-archive"].id
+}
+
+output "cicd_account_id" {
+  description = "Dedicated CI/CD account in the Deployments OU; null unless deployments_account_enabled"
+  value       = try(aws_organizations_account.this["cicd"].id, null)
+}
+
+output "account_ids" {
+  description = "Every vended member account, name => id"
+  value       = { for name, a in aws_organizations_account.this : name => a.id }
 }

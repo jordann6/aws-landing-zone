@@ -43,3 +43,33 @@ genuinely custom pieces (bespoke SCPs, the inspection VPC design, the paved-road
 workload modules) as additions on top. The bespoke build here is the teaching
 version; it is not an argument against the accelerator where the accelerator's
 maintenance burden is worth paying.
+
+## Account vending here, and Account Factory in production
+
+Every member account is one entry in `local.accounts` in `accounts/accounts.tf`
+(name, OU, gated, enabled). A new account is a one-line pull request. CI plans it
+on the PR, and after merge `apply-governance.yml` pauses on the `org-apply`
+environment, so a reviewer approves exactly one `aws_organizations_account` before
+it exists. The key doubles as the account name and the email alias
+(`+<key>@`), so they cannot drift apart. `prevent_destroy` and
+`close_on_deletion = false` mean deleting a line cannot close an account; that
+takes the Suspended OU and a CloseAccount from the management account.
+
+The 2026-11-20 refactor from one block per account to this map used `moved`
+blocks and planned as 8 moves with 0 to add, change or destroy. Turning on the
+designed-but-off `cicd` entry plans exactly one new account.
+
+| This repo | Control Tower Account Factory / AFT |
+|---|---|
+| One map entry in `local.accounts` | One `account_request` module call in the AFT account-request repo |
+| PR plan in `guardrails.yml`, gated apply on `org-apply` | AFT's CodePipeline picks up the request; review happens in the PR to that repo |
+| OU from the map entry; SCPs inherited from the OU | Managed OU registered in Control Tower; guardrails (controls) inherited |
+| Baseline per account comes from separate roots (bootstrap CI roles, governance, StackSets in Step 5) | AFT global and account customizations (Terraform) plus provisioning customizations (Step Functions) run on every new account |
+| `OrganizationAccountAccessRole` created by Organizations | `AWSControlTowerExecution` created by Control Tower |
+| Account retirement is a manual move to Suspended, then CloseAccount | Same pattern; Control Tower unmanages, then the account is closed |
+
+What production would change is the same answer as above. AFT would own the
+request pipeline, account baselining and drift, which removes the map, the
+`moved` history and the per-account bootstrap modules from this repo. The
+review shape is the one thing worth keeping as is, where a new account is a
+diff someone approves before it exists.
