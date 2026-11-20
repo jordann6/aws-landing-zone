@@ -90,6 +90,11 @@ resource "aws_organizations_policy_attachment" "root_deny_root_user" {
 # org trail, and without it a member-owned trail (the secrets scanner's
 # secops-trail in security) could never be torn down. The CI gha-apply roles are
 # not exempt.
+# The Config statement carries the same single exemption (added 2026-11-20). A
+# member recorder that a lab created, or one left by a failed teardown (prod's
+# selfheal-recorder from 11/4), could otherwise never be removed, and AWS allows
+# only one recorder per account and region, so it blocked the org-standard
+# recorder. CI and Identity Center personas still cannot stop or delete Config.
 resource "aws_organizations_policy_attachment" "root_deny_disable_detective" {
   policy_id = aws_organizations_policy.deny_disable_detective.id
   target_id = aws_organizations_organization.org.roots[0].id

@@ -9,6 +9,13 @@ resource "aws_organizations_organization" "org" {
     "ram.amazonaws.com",
     "sso.amazonaws.com",
     "ec2.amazonaws.com",
+    # Step 5: Firewall Manager (security is its admin) and service-managed
+    # StackSets (member Config recorders). StackSets access was activated with
+    # `aws cloudformation activate-organizations-access`, which also creates the
+    # AWSServiceRoleForCloudFormationStackSetsOrgAdmin role; listing it here
+    # keeps that setting from reading as drift.
+    "fms.amazonaws.com",
+    "member.org.stacksets.cloudformation.amazonaws.com",
   ]
 
   enabled_policy_types = [

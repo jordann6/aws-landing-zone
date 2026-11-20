@@ -12,7 +12,12 @@
         "config:DeleteConformancePack",
         "config:DeleteOrganizationConfigRule"
       ],
-      "Resource": "*"
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::*:role/OrganizationAccountAccessRole"
+        }
+      }
     },
     {
       "Sid": "DenyDisablingGuardDuty",
