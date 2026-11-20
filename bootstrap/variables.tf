@@ -79,3 +79,9 @@ variable "apply_environments" {
   type        = list(string)
   default     = ["prod-apply", "destroy", "org-apply"]
 }
+
+variable "ingress_hostname" {
+  description = "The only DNS name (plus its ACM validation record) the CI apply role may write in the management account's hosted zones"
+  type        = string
+  default     = "lz-ingress.jordandesigns.io"
+}

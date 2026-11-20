@@ -131,6 +131,10 @@ data "aws_iam_policy_document" "plan_permissions" {
       "guardduty:ListOrganizationAdminAccounts",
       "securityhub:ListOrganizationAdminAccounts",
       "ram:GetResourceShareAssociations", "ram:ListResourceShares",
+      # network/ingress.tf reads the jordandesigns.io zone to place the ingress
+      # name and its ACM validation record.
+      "route53:GetHostedZone", "route53:ListHostedZones", "route53:ListHostedZonesByName",
+      "route53:ListResourceRecordSets", "route53:GetChange", "route53:ListTagsForResource",
     ]
     resources = ["*"]
   }
@@ -244,6 +248,24 @@ data "aws_iam_policy_document" "apply_permissions" {
       "iam:GetRole",
     ]
     resources = ["*"]
+  }
+  # Route 53 writes for the ingress DMZ (network/ingress.tf), limited to the
+  # ingress hostname and its ACM validation record. The site's own records in
+  # the same zone stay out of reach.
+  statement {
+    sid       = "ReadIngressZone"
+    actions   = ["route53:GetHostedZone", "route53:ListHostedZones", "route53:ListHostedZonesByName", "route53:ListResourceRecordSets", "route53:GetChange", "route53:ListTagsForResource"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "WriteIngressRecordsOnly"
+    actions   = ["route53:ChangeResourceRecordSets"]
+    resources = ["arn:aws:route53:::hostedzone/*"]
+    condition {
+      test     = "ForAllValues:StringLike"
+      variable = "route53:ChangeResourceRecordSetsNormalizedRecordNames"
+      values   = [var.ingress_hostname, "_*.${var.ingress_hostname}"]
+    }
   }
   # The CI role never schedules a key for deletion or hands the trail key away;
   # those stay operator actions.
