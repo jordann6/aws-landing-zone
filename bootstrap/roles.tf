@@ -112,6 +112,28 @@ data "aws_iam_policy_document" "plan_permissions" {
     actions   = ["sts:GetCallerIdentity"]
     resources = ["*"]
   }
+  # The governance root (terraform/) keeps the org trail, Identity Center, the
+  # root-activity alert path, budgets and the detective-service admin delegation in
+  # this account. Refreshing them needs configuration reads only: no kms:Decrypt,
+  # no s3:GetObject outside state, no secret values.
+  statement {
+    sid = "ReadGovernanceConfig"
+    actions = [
+      "cloudtrail:Describe*", "cloudtrail:Get*", "cloudtrail:List*",
+      "kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListAliases", "kms:ListResourceTags",
+      "sso:Describe*", "sso:Get*", "sso:List*",
+      "identitystore:Describe*", "identitystore:Get*", "identitystore:List*",
+      "budgets:View*", "budgets:ListTagsForResource",
+      "ce:GetAnomalyMonitors", "ce:GetAnomalySubscriptions", "ce:ListTagsForResource",
+      "sns:GetTopicAttributes", "sns:GetSubscriptionAttributes", "sns:ListSubscriptionsByTopic", "sns:ListTagsForResource",
+      "events:DescribeRule", "events:ListTargetsByRule", "events:ListTagsForResource",
+      "iam:GetAccountPasswordPolicy",
+      "guardduty:ListOrganizationAdminAccounts",
+      "securityhub:ListOrganizationAdminAccounts",
+      "ram:GetResourceShareAssociations", "ram:ListResourceShares",
+    ]
+    resources = ["*"]
+  }
   statement {
     sid       = "ChainToMemberPlanRoles"
     actions   = ["sts:AssumeRole"]
@@ -149,7 +171,8 @@ data "aws_iam_policy_document" "plan_read_combined" {
 
 # ============================================================================
 # gha-apply: write-scoped. Assumable ONLY from a job bound to one of the gated
-# environments. The required reviewer on those environments is the JIT-to-prod
+# environments (prod-apply and destroy for the hourly stack, org-apply for the
+# persistent accounts/ and terraform/ roots). The required reviewer on those environments is the JIT-to-prod
 # control: no standing permission to change the org.
 # ============================================================================
 data "aws_iam_policy_document" "apply_trust" {
@@ -196,6 +219,37 @@ data "aws_iam_policy_document" "apply_permissions" {
   statement {
     sid       = "ReadIdentity"
     actions   = ["sts:GetCallerIdentity"]
+    resources = ["*"]
+  }
+  # The governance root's management-account resources (ADR-0004 addendum).
+  # Bounded the same way as the org actions above: only the org-apply environment
+  # reaches this role, and its reviewer approves the saved plan.
+  statement {
+    sid = "ManageGovernanceRoot"
+    actions = [
+      "cloudtrail:*",
+      "kms:CreateKey", "kms:CreateAlias", "kms:UpdateAlias", "kms:DeleteAlias", "kms:DescribeKey",
+      "kms:EnableKeyRotation", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:PutKeyPolicy",
+      "kms:ListAliases", "kms:ListResourceTags", "kms:TagResource", "kms:UntagResource",
+      "sso:*", "identitystore:*",
+      "budgets:*",
+      "ce:*Anomaly*", "ce:TagResource", "ce:UntagResource", "ce:ListTagsForResource",
+      "sns:*",
+      "events:*",
+      "iam:GetAccountPasswordPolicy", "iam:UpdateAccountPasswordPolicy",
+      "guardduty:EnableOrganizationAdminAccount", "guardduty:DisableOrganizationAdminAccount", "guardduty:ListOrganizationAdminAccounts",
+      "securityhub:EnableOrganizationAdminAccount", "securityhub:DisableOrganizationAdminAccount", "securityhub:ListOrganizationAdminAccounts",
+      "ram:EnableSharingWithAwsOrganization", "ram:GetResourceShareAssociations", "ram:ListResourceShares",
+      "iam:GetRole",
+    ]
+    resources = ["*"]
+  }
+  # The CI role never schedules a key for deletion or hands the trail key away;
+  # those stay operator actions.
+  statement {
+    sid       = "NoKeyDestruction"
+    effect    = "Deny"
+    actions   = ["kms:ScheduleKeyDeletion", "kms:DisableKey"]
     resources = ["*"]
   }
   statement {

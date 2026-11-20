@@ -77,5 +77,5 @@ variable "create_github_oidc_provider" {
 variable "apply_environments" {
   description = "GitHub environments allowed to assume the write-scoped apply role"
   type        = list(string)
-  default     = ["prod-apply", "destroy"]
+  default     = ["prod-apply", "destroy", "org-apply"]
 }

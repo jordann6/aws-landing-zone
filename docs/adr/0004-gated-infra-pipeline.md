@@ -182,3 +182,53 @@ stack is ever left up unattended.
   only, on top of the workflows refusing non-main refs and gha-plan trusting only
   main and pull requests. main still has no ruleset requiring the static and plan
   checks; that is the remaining durable version of the control.
+
+## Addendum (2026-11-20): the governance roots move behind the gate
+
+The consequence above, that `accounts/` and `terraform/` stay operator-applied,
+no longer holds. Every change that closes the reference-diagram gaps (SCP
+scoping, lifecycle OUs, account vending, the Config aggregator) lands in one of
+those two roots. An SCP is the highest-blast-radius change in the org, and it
+was the only kind still applied from a laptop with no saved plan for a reviewer
+to read.
+
+**What changed**
+
+- `apply-governance.yml` applies `accounts/` and then `terraform/` with the same
+  `tf-apply.yml` (platform-guardrails v1.11.0): read-only plan, destroy guard,
+  saved plan, pause on a new `org-apply` environment, replay, then a second plan
+  that must be empty. It runs on pushes to main that touch either root, or by
+  dispatch. It has its own concurrency group and no destroy counterpart.
+- `guardrails.yml` plans both roots on every pull request, so an org change shows
+  its diff before review instead of after merge.
+- bootstrap adds `org-apply` to the environments `gha-apply` trusts, and creates
+  the member `gha-plan` / `gha-apply` pair in security and log-archive. The
+  governance root picks between those and `OrganizationAccountAccessRole` from the
+  ephemeral `ci_stage`, exactly as the hourly roots do.
+- The management `gha-plan` gains configuration reads for the governance services
+  (CloudTrail, KMS metadata, Identity Center, budgets, SNS, EventBridge). No
+  `kms:Decrypt`, no object reads outside state. The management `gha-apply` gains
+  writes for the same services, plus an explicit deny on `kms:ScheduleKeyDeletion`
+  and `kms:DisableKey`.
+- The gitignored tfvars reach CI as the `ACCOUNTS_TFVARS` (already used by drift)
+  and `GOVERNANCE_TFVARS` secrets. The personal values in them are declared
+  `sensitive`, because `tf-plan.yml` posts the plan to the pull request.
+
+**What did not change**
+
+- bootstrap stays operator-applied. It creates the identities CI assumes, so CI
+  must never be able to rewrite its own trust.
+- Member accounts keep `prevent_destroy`, and the destroy guard still fails a plan
+  that deletes a stateful type, so the gate cannot be approved into closing an
+  account by accident.
+- `org-apply` accepts deployments from `main` only, like the other two
+  environments.
+
+**Blast radius, honestly**
+
+`gha-apply` could already call `organizations:*`. What is new is that the role
+can now also rewrite the org trail, Identity Center and the detective-service
+delegation, and chain into admin in security and log-archive. The bounds are the
+same as for prod: a named reviewer approves a saved plan, the role exists only
+inside that job, the SCPs are the ceiling in member accounts, and the member
+guard denies long-lived credentials and edits to the CI and break-glass roles.

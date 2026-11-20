@@ -7,6 +7,7 @@ variable "region" {
 variable "org_email_domain" {
   description = "Email address base for member accounts (uses + aliases)"
   type        = string
+  sensitive   = true
 }
 
 variable "allowed_regions" {

@@ -18,10 +18,6 @@ terraform {
   }
 }
 
-locals {
-  org_access_role = "OrganizationAccountAccessRole"
-}
-
 provider "aws" {
   region = var.region
 
@@ -51,7 +47,7 @@ provider "aws" {
   region = var.region
 
   assume_role {
-    role_arn = "arn:aws:iam::${local.log_archive_account_id}:role/${local.org_access_role}"
+    role_arn = "arn:aws:iam::${local.log_archive_account_id}:role/${local.member_role_name}"
   }
 
   default_tags {
@@ -70,7 +66,7 @@ provider "aws" {
   region = var.region
 
   assume_role {
-    role_arn = "arn:aws:iam::${local.security_account_id}:role/${local.org_access_role}"
+    role_arn = "arn:aws:iam::${local.security_account_id}:role/${local.member_role_name}"
   }
 
   default_tags {

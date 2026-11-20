@@ -14,10 +14,12 @@ output "apply_role_arn" {
 }
 
 output "member_ci_role_arns" {
-  description = "Per-member-account CI roles the hourly roots assume in CI (plan read-only, apply write)"
+  description = "Per-member-account CI roles the hourly and governance roots assume in CI (plan read-only, apply write)"
   value = {
-    network = module.network_ci_roles
-    prod    = module.prod_ci_roles
+    network     = module.network_ci_roles
+    prod        = module.prod_ci_roles
+    security    = module.security_ci_roles
+    log_archive = module.log_archive_ci_roles
   }
 }
 

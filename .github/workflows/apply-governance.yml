@@ -1,0 +1,125 @@
+name: Apply governance (gated)
+
+# Reviewer-gated apply for the persistent roots (ADR-0004 addendum): accounts/
+# (org, OUs, member accounts, SCPs, tag policies) and then terraform/ (org trail,
+# Config, detective services, Identity Center, budgets), which reads the account
+# ids from accounts/ state.
+#
+# Same shape as apply.yml: tf-apply plans read-only with gha-plan, runs the
+# destroy guard, saves the plan, then pauses on the `org-apply` environment and
+# replays that exact saved plan with the environment-gated gha-apply role. An
+# empty plan skips the gated job. After both applies, each root is planned again
+# and must come back empty.
+#
+# These roots are never torn down, so this workflow is not tied to
+# HOURLY_STACK_ENABLED and has no destroy counterpart. Member accounts carry
+# prevent_destroy, so a plan that would remove one fails before the gate.
+#
+# Required variables (org email domain, alert address, operator user) live in
+# gitignored terraform.tfvars files. The ACCOUNTS_TFVARS and GOVERNANCE_TFVARS
+# repository secrets hold their contents; the roots mark those values sensitive,
+# so plans print "(sensitive value)" instead.
+#
+# bootstrap/ stays operator-applied: it creates the roles this workflow assumes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - accounts/**
+      - terraform/**
+  workflow_dispatch:
+
+# Governance changes never interleave with each other. They use their own group,
+# not the hourly stack's, so an SCP fix does not wait behind a 30-minute EKS apply.
+concurrency:
+  group: aws-landing-zone-governance
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  accounts:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@20cdccde02487740a39c0a46a74f625d11d1c1d2 # v1.11.0
+    with:
+      terraform_dir: accounts
+      environment: org-apply
+      plan_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
+      aws_region: us-east-1
+      skip_apply_when_unchanged: true
+      guardrails_ref: 20cdccde02487740a39c0a46a74f625d11d1c1d2
+    secrets:
+      TF_VARS: ${{ secrets.ACCOUNTS_TFVARS }}
+
+  governance:
+    needs: accounts
+    permissions:
+      contents: read
+      id-token: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-apply.yml@20cdccde02487740a39c0a46a74f625d11d1c1d2 # v1.11.0
+    with:
+      terraform_dir: terraform
+      environment: org-apply
+      plan_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      apply_role_arn: arn:aws:iam::692859913278:role/gha-apply
+      aws_region: us-east-1
+      skip_apply_when_unchanged: true
+      guardrails_ref: 20cdccde02487740a39c0a46a74f625d11d1c1d2
+    secrets:
+      TF_VARS: ${{ secrets.GOVERNANCE_TFVARS }}
+
+  # ---- Second plan: must be empty ----------------------------------------------
+  replan_accounts:
+    needs: governance
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@20cdccde02487740a39c0a46a74f625d11d1c1d2 # v1.11.0
+    with:
+      terraform_dir: accounts
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      aws_region: us-east-1
+      guardrails_ref: 20cdccde02487740a39c0a46a74f625d11d1c1d2
+    secrets:
+      TF_VARS: ${{ secrets.ACCOUNTS_TFVARS }}
+
+  replan_governance:
+    needs: governance
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@20cdccde02487740a39c0a46a74f625d11d1c1d2 # v1.11.0
+    with:
+      terraform_dir: terraform
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      aws_region: us-east-1
+      guardrails_ref: 20cdccde02487740a39c0a46a74f625d11d1c1d2
+    secrets:
+      TF_VARS: ${{ secrets.GOVERNANCE_TFVARS }}
+
+  no_drift:
+    name: Second plan is empty
+    needs: [replan_accounts, replan_governance]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          ACCOUNTS: ${{ needs.replan_accounts.outputs.has_changes }}
+          GOVERNANCE: ${{ needs.replan_governance.outputs.has_changes }}
+        run: |
+          status=0
+          for pair in "accounts=$ACCOUNTS" "terraform=$GOVERNANCE"; do
+            root=${pair%%=*}; changes=${pair#*=}
+            echo "$root: has_changes=$changes" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$changes" != "false" ]; then
+              echo "::error::$root planned changes right after its apply: a perpetual diff, or drift. See the replan job summary."
+              status=1
+            fi
+          done
+          exit $status

@@ -173,7 +173,7 @@ resource "aws_ssoadmin_account_assignment" "persona" {
 # The user gets the admin persona and nothing else; MFA and the password are set
 # once in the access portal, which Terraform cannot do.
 resource "aws_identitystore_user" "operator" {
-  count = local.idc_enabled && var.operator_user != null ? 1 : 0
+  count = local.idc_enabled && nonsensitive(var.operator_user != null) ? 1 : 0
 
   identity_store_id = local.identity_store
   user_name         = var.operator_user.user_name
@@ -191,7 +191,7 @@ resource "aws_identitystore_user" "operator" {
 }
 
 resource "aws_identitystore_group_membership" "operator_admin" {
-  count = local.idc_enabled && var.operator_user != null ? 1 : 0
+  count = local.idc_enabled && nonsensitive(var.operator_user != null) ? 1 : 0
 
   identity_store_id = local.identity_store
   group_id          = aws_identitystore_group.persona["admin"].group_id
