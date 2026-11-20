@@ -283,13 +283,13 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@20cdccde02487740a39c0a46a74f625d11d1c1d2 # v1.11.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@03d67c120c0c6cc3a98c51d983c0a17bd5946e6e # v1.11.0
     with:
       terraform_dir: accounts
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
       enable_infracost: false
-      guardrails_ref: 20cdccde02487740a39c0a46a74f625d11d1c1d2
+      guardrails_ref: 03d67c120c0c6cc3a98c51d983c0a17bd5946e6e
     secrets:
       TF_VARS: ${{ secrets.ACCOUNTS_TFVARS }}
 
@@ -299,12 +299,12 @@ jobs:
       contents: read
       id-token: write
       pull-requests: write
-    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@20cdccde02487740a39c0a46a74f625d11d1c1d2 # v1.11.0
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@03d67c120c0c6cc3a98c51d983c0a17bd5946e6e # v1.11.0
     with:
       terraform_dir: terraform
       aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
       aws_region: us-east-1
       enable_infracost: false
-      guardrails_ref: 20cdccde02487740a39c0a46a74f625d11d1c1d2
+      guardrails_ref: 03d67c120c0c6cc3a98c51d983c0a17bd5946e6e
     secrets:
       TF_VARS: ${{ secrets.GOVERNANCE_TFVARS }}
