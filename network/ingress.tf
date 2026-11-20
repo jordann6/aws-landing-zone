@@ -119,6 +119,7 @@ resource "aws_security_group" "ingress_alb" {
 }
 
 # --- Load balancer --------------------------------------------------------------
+#trivy:ignore:AVD-AWS-0053:Internet-facing by design; this is the DMZ edge, fronted by the WAF web ACL below and answering only with a fixed response.
 resource "aws_lb" "ingress" {
   #checkov:skip=CKV_AWS_150:Deletion protection off by design; the hourly stack is destroyed after every demo.
   #checkov:skip=CKV_AWS_91:Request logging is the WAF log in log-archive, which records every request with its rule verdict.

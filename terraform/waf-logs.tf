@@ -30,6 +30,7 @@ resource "aws_s3_bucket_versioning" "waf_logs" {
   }
 }
 
+#trivy:ignore:AVD-AWS-0132:SSE-S3 by design, matching the Config bucket; a CMK would need a cross-account grant to the log delivery service. CMK is the production upgrade.
 resource "aws_s3_bucket_server_side_encryption_configuration" "waf_logs" {
   provider = aws.log_archive
   bucket   = aws_s3_bucket.waf_logs.id
