@@ -33,7 +33,7 @@ resource "aws_organizations_policy" "region_lockdown" {
     exempt_actions     = jsonencode(local.region_exempt_actions)
     allowed_regions    = jsonencode(local.standby_enabled ? concat(var.allowed_regions, [var.standby_region]) : var.allowed_regions)
     standby_region     = var.standby_region
-    standby_account_id = local.standby_enabled ? one(aws_organizations_account.prod[*].id) : ""
+    standby_account_id = local.standby_enabled ? try(aws_organizations_account.this["prod"].id, null) : ""
   })
 }
 

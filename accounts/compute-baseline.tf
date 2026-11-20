@@ -7,10 +7,10 @@ locals {
   # Identity Center break-glass exemption; it is inert until the governance
   # root assigns the break-glass persona in that account.
   compute_baseline_account_ids = compact([
-    aws_organizations_account.sandbox.id,
-    one(aws_organizations_account.dev[*].id),
-    one(aws_organizations_account.test[*].id),
-    one(aws_organizations_account.prod[*].id),
+    aws_organizations_account.this["sandbox"].id,
+    try(aws_organizations_account.this["dev"].id, null),
+    try(aws_organizations_account.this["test"].id, null),
+    try(aws_organizations_account.this["prod"].id, null),
   ])
 
   break_glass_principal_arns = flatten([
@@ -78,7 +78,7 @@ resource "aws_organizations_policy" "ec2_baseline" {
     amazon_image_names   = jsonencode(each.value.amazon_image_names)
     # Golden AMIs are built and owned by the prod account (workload/imagebuilder.tf);
     # the criteria is omitted when the full account set is not vended.
-    golden_ami_owner_account_id = one(aws_organizations_account.prod[*].id)
+    golden_ami_owner_account_id = try(aws_organizations_account.this["prod"].id, null)
   })
   depends_on = [aws_organizations_organization.org]
 }

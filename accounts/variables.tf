@@ -34,6 +34,12 @@ variable "full_account_set" {
   default     = true
 }
 
+variable "deployments_account_enabled" {
+  description = "Vend the dedicated cicd account into the Deployments OU. Off: pipelines run in GitHub Actions over OIDC, and the org is near its account quota."
+  type        = bool
+  default     = false
+}
+
 variable "enable_tag_policy" {
   description = "Attach the organization tag policy. Requires the TAG_POLICY type enabled on the org."
   type        = bool
