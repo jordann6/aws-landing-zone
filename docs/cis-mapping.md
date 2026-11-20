@@ -39,7 +39,7 @@ view; this table is the design-time intent behind that score.
 | 3.2 | CloudTrail log file validation | `aws_cloudtrail.org` (`enable_log_file_validation`); tampering denied org-wide by the `DenyCloudTrailTampering` statement in the root `deny-disable-detective` SCP, plus Object Lock on the bucket |
 | 3.3 | CloudTrail bucket not public | `aws_s3_bucket_public_access_block.trail` + `deny-public-s3` SCP (root) |
 | 3.4 | CloudTrail to CloudWatch Logs | N/A (demo): deferred; detection is via GuardDuty + Security Hub |
-| 3.5 | AWS Config enabled | `aws_config_configuration_recorder.security` (demo-scoped to the security account; production enables a recorder per account via StackSet) |
+| 3.5 | AWS Config enabled | Every account records. The security account records all supported types (`config.tf`). The other member accounts get a recorder from a service-managed StackSet that auto-deploys to new accounts in the target OUs, and the management account has its own (`config-org.tf`). Those recorders are limited to security groups, instances, load balancers, web ACLs and buckets to keep the standing cost near zero; a production rollout records all supported types. An organization aggregator in the security account, the Config delegated administrator, reports all nine accounts |
 | 3.6 | CloudTrail bucket access logging | N/A (demo): access logging a log bucket is recursive |
 | 3.7 | CloudTrail logs encrypted with KMS | `aws_cloudtrail.org` (`kms_key_id` = `aws_kms_key.logging`) |
 | 3.8 | KMS key rotation | `aws_kms_key.logging` (`enable_key_rotation = true`) |
@@ -59,6 +59,7 @@ view; this table is the design-time intent behind that score.
 | 5.1 | No ingress to admin ports from 0.0.0.0/0 | No public admin path exists; access is SSM Session Manager over private endpoints (`endpoints.tf`), no bastion, no public SSH |
 | 5.3 | Default security group restricts all traffic | `aws_default_security_group.hub` (no rules) |
 | 5.4 | Routing tables least access | Inspection routing (`routing.tf`) forces all egress and return traffic through the firewall |
+| Beyond CIS | Internet-facing edge inspected | The only public listener is the ingress load balancer (`ingress.tf`), behind a WAF web ACL with the IP reputation list, a per-IP rate limit and the Common and known-bad-input rule groups. Every request and its verdict is logged to `aws-waf-logs-*` in log-archive (`terraform/waf-logs.tf`). Firewall Manager is administered from the security account with its org-wide WAF policy written and off (`fms.tf`) |
 
 ## Data tier and workload (Phase 5/6)
 
@@ -87,7 +88,8 @@ The SCPs enforce several controls preventively that CIS only checks detectively:
 region lockdown (`region-lockdown`), deny leaving the org (`deny-leave-org`),
 deny disabling the detective services or tampering with any trail
 (`deny-disable-detective`), deny public S3 (`deny-public-s3`), and require S3
-encryption (`require-s3-encryption`). A preventive deny is stronger than a
+encryption (`require-s3-encryption`). Accounts in the Suspended OU are frozen
+by `deny-all`. A preventive deny is stronger than a
 detective finding, so where both are possible this zone denies.
 
 ## Where each SCP is attached, and why

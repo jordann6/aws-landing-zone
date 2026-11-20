@@ -20,22 +20,25 @@ from diagrams.aws.management import (
     Cloudwatch,
     CloudwatchAlarm,
     CloudwatchEventEventBased,
+    CloudformationStack,
     Config,
     Organizations,
     OrganizationsAccount,
     SystemsManager,
 )
 from diagrams.aws.ml import Bedrock
-from diagrams.aws.network import Endpoint, InternetGateway, NATGateway, NetworkFirewall, Route53, TransitGateway, VPC
-from diagrams.aws.security import Guardduty, IAMPermissions, IAMRole, SingleSignOn
+from diagrams.aws.network import ElbApplicationLoadBalancer, Endpoint, InternetGateway, NATGateway, NetworkFirewall, Route53, TransitGateway, VPC
+from diagrams.aws.security import WAF, FirewallManager, Guardduty, IAMPermissions, IAMRole, SingleSignOn
 from diagrams.aws.storage import Backup, S3
 from diagrams.onprem.ci import GithubActions
+from diagrams.onprem.client import Users
 
 RETAINED = {"bgcolor": "#eef6ff", "color": "#7299bd", "fontsize": "17"}
 TEMPORARY = {"bgcolor": "#fff4e7", "color": "#d49447", "fontsize": "17"}
 EXTERNAL = {"bgcolor": "#f3f3f3", "color": "#8c8c8c", "fontsize": "17"}
 ALERT = "#b03a2e"
 EGRESS = "#ac6413"
+INGRESS = "#2e7d32"
 
 with Diagram(
     "AWS Landing Zone | retained foundation, standing controls and temporary demo\n"
@@ -48,15 +51,16 @@ with Diagram(
     edge_attr={"fontsize": "11"},
 ):
     with Cluster("GitHub | gated infra pipeline (ADR-0004)", graph_attr=EXTERNAL):
-        pipeline = GithubActions("guardrails.yml: PR plan\napply.yml: prod-apply gate\ndestroy.yml: destroy gate")
+        pipeline = GithubActions("guardrails.yml: PR plan\napply-governance.yml: org-apply gate\napply.yml: prod-apply gate\ndestroy.yml: destroy gate")
 
     with Cluster("RETAIN | organization, accounts and governance", graph_attr=RETAINED):
         with Cluster("Management account", graph_attr=RETAINED):
-            org = Organizations("Organization\n8 ACTIVE members")
-            controls = IAMPermissions("SCPs + tag policy\nEC2 declarative policy\nRAM org sharing")
+            org = Organizations("Organization\n8 ACTIVE members\n6 OUs incl. Suspended\n(deny-all), Deployments")
+            controls = IAMPermissions("5 SCPs at the root\nOU SCPs + tag policy\nEC2 declarative policy\nRAM org sharing")
+            stackset = CloudformationStack("Config recorder\nStackSet, auto-deploy\nto member OUs")
             identity = SingleSignOn("Identity Center\noptional")
             trail = Cloudtrail("Organization\ntrail, all\nmembers")
-            ci_roles = IAMRole("gha-plan +\ngha-apply, one\nrole each in\nnetwork, prod")
+            ci_roles = IAMRole("gha-plan +\ngha-apply, one\nrole each in\nnetwork, prod,\nsecurity, log-archive")
             state = S3("Terraform state\nKMS / versioned\nprevent_destroy")
             org >> Edge(label="member policy") >> controls
             org >> Edge(style="dotted") >> identity
@@ -66,7 +70,8 @@ with Diagram(
 
         with Cluster("Security account", graph_attr=RETAINED):
             guardduty = Guardduty("GuardDuty\ndelegated\nadmin")
-            config = Config("AWS Config\nconformance\npack")
+            config = Config("AWS Config\nconformance\npack + org\naggregator")
+            fms = FirewallManager("Firewall\nManager admin\npolicy in code\nflag off")
             findings = CloudwatchEventEventBased("Finding alerts\nEventBridge / SNS")
             guardduty >> Edge(style="dashed") >> findings
             scanner = Lambda("Secrets\nscanner, 90-day\nage alarms")
@@ -75,8 +80,11 @@ with Diagram(
 
         with Cluster("Log-archive account", graph_attr=RETAINED):
             bucket = S3("KMS-encrypted logs\nObject Lock")
+            config_bucket = S3("Config history\nper-account prefixes")
+            waf_bucket = S3("aws-waf-logs-*\n90-day expiry")
 
         trail >> bucket
+        stackset >> Edge(style="dashed", label="recorders deliver") >> config_bucket
 
         with Cluster("Shared-services account | observability and standing controls", graph_attr=RETAINED):
             monitoring = Cloudwatch("OAM sink + central alarms\nprod and network links")
@@ -127,6 +135,12 @@ with Diagram(
                 hub_endpoints = Endpoint("Hub private endpoints\n+ S3 gateway")
                 tgw >> Edge(label="inspected egress", color=EGRESS) >> firewall
                 firewall >> nat >> internet
+                with Cluster("Ingress DMZ | 10.0.50-51.0/24 | two AZs", graph_attr=TEMPORARY):
+                    waf = WAF("WAF web ACL\nIP reputation\nrate limit\nCommon rules\nknown-bad inputs")
+                    alb = ElbApplicationLoadBalancer("Internet-facing ALB\nACM cert, TLS 1.3\nfixed response")
+                    waf >> Edge(color=INGRESS) >> alb
+            clients = Users("Internet clients\nlz-ingress.jordandesigns.io")
+            clients >> Edge(color=INGRESS, label="HTTPS") >> waf
 
         with Cluster("workload/, compute/ and delivery/ | prod account | us-east-1", graph_attr=TEMPORARY):
             with Cluster("Private VPC | 10.3.0.0/16 | no local NAT or IGW", graph_attr=TEMPORARY):

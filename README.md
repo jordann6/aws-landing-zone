@@ -1,10 +1,11 @@
 # AWS Landing Zone
 
-A Terraform AWS landing zone: an eight-account organization with inherited
-guardrails, centralized audit and detection, a shared Transit Gateway that sends
-all workload egress through Network Firewall, and a private EKS and Multi-AZ
-PostgreSQL reference workload. The hourly layers build and tear down through a
-reviewer-gated CI pipeline. It is one of three isolated landing zones (AWS,
+A Terraform AWS landing zone: an eight-account organization with guardrails
+attached at the root, centralized audit and detection with AWS Config recording
+in every account, a shared Transit Gateway that sends all workload egress
+through Network Firewall, an internet-facing edge behind AWS WAF, and a private
+EKS and Multi-AZ PostgreSQL reference workload. Every root that changes the
+organization or the hourly stack applies through a reviewer-gated CI pipeline. It is one of three isolated landing zones (AWS,
 Azure, GCP) built to the same design.
 
 ![AWS landing zone overview](docs/overview.png)
@@ -14,7 +15,9 @@ a month. Every member account inherits its SCPs. The network and prod layers
 (orange) bill by the hour, so the pipeline builds them for a proof and destroys
 them afterwards. The prod VPC has no NAT gateway or internet gateway of its own:
 its only way out is the Transit Gateway, the firewall's domain allowlist and the
-hub NAT. The [full diagram](#full-diagram) shows every control and account.
+hub NAT. Inbound traffic takes a separate path, through a WAF web ACL to a load
+balancer in two DMZ subnets of the hub. The [full diagram](#full-diagram) shows
+every control and account.
 
 ## The problem
 
@@ -45,13 +48,35 @@ or IGW. Egress goes through the TGW to an inspection VPC in the network account,
 through Network Firewall's domain allowlist, then the hub NAT. That gives one
 chokepoint to log and police, at the price of a hub every spoke depends on.
 
+**Organization-wide controls at the root, inside AWS's five-SCP limit.** The
+CloudTrail tampering deny was attached to Prod alone while the code comment
+called it organization-wide, and the public S3 deny sat on Prod too. A root
+holds at most five SCPs and already held four, so the tampering statements
+went into the existing detective-services policy instead of a sixth. Each
+member deny exempts only `OrganizationAccountAccessRole`, the break-glass path.
+Attaching per OU was the rejected option, because an OU added later would
+start without the control. Placement and reasoning for every SCP are in
+[cis-mapping](docs/cis-mapping.md#where-each-scp-is-attached-and-why).
+
+**WAF at the edge, Network Firewall for egress.** Ingress is HTTP, so it is
+inspected at layer 7 by a WAF web ACL on the load balancer, with AWS's IP
+reputation list first, a per-IP rate limit, then the Common and known-bad-input
+rule groups. Egress stays on the firewall's domain allowlist. Firewall Manager
+would push the same web ACL to every load balancer in the Workloads and
+Infrastructure OUs, and its policy is written in `terraform/fms.tf`, but it
+bills about $100 per policy per region per month, so the flag stays off and the
+one web ACL is managed directly.
+
 **Split plan and apply identities in CI.** A pull request can only reach a
 read-only plan role. The write role exists only inside a reviewer-gated
 environment, and IAM trust (not the workflow file) enforces that pairing. The
 apply replays the exact plan the reviewer approved, then replans every root and
 fails if the second plan is not empty. The rejected shortcut was letting the
 plan role assume `OrganizationAccountAccessRole`, which would have made
-"read-only" admin from any PR. [ADR-0004](docs/adr/0004-gated-infra-pipeline.md).
+"read-only" admin from any PR. The organization (`accounts/`) and governance
+(`terraform/`) roots moved behind the same gate, on their own `org-apply`
+environment, so an SCP change gets a CI plan on the pull request and a reviewer
+before it applies. [ADR-0004](docs/adr/0004-gated-infra-pipeline.md).
 
 **Reboot is the only automated remediation.** The standing remediation Lambda
 reboots only instances tagged `Monitored=true`, and the IAM permission carries
@@ -69,8 +94,9 @@ state sits in a dedicated, KMS-encrypted backend that no plan can delete
 ## What the live runs found
 
 Plans, unit tests and the static gates passed on all of these. The first was
-caught while designing the pipeline; the other five surfaced only against the
-real organization.
+caught while designing the pipeline and the seventh in a review of the SCPs
+against their documentation. The rest surfaced only against the real
+organization.
 
 1. **The CI roles could never have been assumed.** This repository's OIDC
    tokens carry immutable subjects (`repo:owner@id/repo@id:...`), and the trust
@@ -97,13 +123,40 @@ real organization.
 6. **The hourly cost alarm never fired.** The TTL guard runs on GitHub's cron,
    which delays or drops scheduled runs. The gated destroy and its post-destroy
    check are the real control; the TTL guard is a backstop.
+7. **Two SCPs were scoped narrower than the docs said, and one blocked its own
+   fix.** The CloudTrail tampering deny and the public S3 deny were attached to
+   Prod only. The S3 policy also denied every `s3:PutAccountPublicAccessBlock`,
+   so widening it unchanged would have stopped any account from turning the
+   account-level block on. The statement now denies that call to everyone but
+   the break-glass role, and both policies sit at the root.
+8. **Our own SCP protected the recorders it was meant to replace.** AWS Config
+   allows one recorder per account per region, and old lab recorders in prod and
+   sandbox blocked the org-wide StackSet. The root SCP denies deleting Config, so
+   Terraform could not clear them either. The Config statement gained the same
+   break-glass exemption, the old recorders were removed under that role, and
+   the StackSet then deployed to all seven target accounts.
+9. **The Firewall Manager admin association failed on first apply.** Seconds
+   after trusted access was enabled, `AssociateAdminAccount` returned
+   `InvalidOperationException`. A retry succeeded, and an `import` block brought
+   the association back under Terraform, so the next gated plan was empty.
+10. **A read-only plan could not see Lambda environment variables.** The first
+    gated bring-up with the secret-rotation functions applied all three roots,
+    then failed the empty second plan. The member `gha-plan` denied
+    `kms:Decrypt` everywhere, and Lambda decrypts a function's environment with
+    the caller's permissions, so every plan saw the variables as missing and
+    added them again. Decrypt is now allowed only through Lambda
+    (`kms:ViaService`), and `GetSecretValue` and the other data reads stay
+    denied.
 
 ## Status
 
 | Layer | State | Last run |
 |---|---|---|
 | Organization, governance, observability | Retained | Continuous |
-| Infra pipeline (network, workload, delivery) | Proven through CI, destroyed | 2026-10-15 |
+| Governance pipeline (`accounts/`, `terraform/`) | Gated through `apply-governance.yml` | 2026-11-20 |
+| Infra pipeline (network, workload, delivery, ingress) | Proven through CI, destroyed | 2026-11-20 |
+| Root SCPs, Suspended and Deployments OUs, account map | Retained; denials proven | 2026-11-20 |
+| Org-wide AWS Config (StackSet recorders, aggregator) | Retained | 2026-11-20 |
 | Drift detection (`accounts/`) | Live, daily; proven by a hand-edited tag | 2026-10-26 |
 | Compute baseline | Proven, destroyed; guardrails stay live on the Sandbox and Workloads OUs | 2026-10-06 |
 | Incident tooling | Proven, responder destroyed; forensics runbook and finding routing retained | 2026-10-17 |
@@ -120,7 +173,12 @@ the earlier layers, and by CI behind reviewer gates for the infra pipeline.
 
 | Layer | What was proven | Where |
 |---|---|---|
-| Infra pipeline | 196 resources applied through CI across three roots (network 50, workload 116, delivery 30) over two runs, the first stopping safely at 47 of 50 network resources on a defect; second plan empty, gated destroy to empty state with the hourly check passing on each root | [ADR-0004](docs/adr/0004-gated-infra-pipeline.md) |
+| Infra pipeline | 223 resources applied through CI on 2026-11-20 (network 65 including the ingress edge, workload 128, delivery 30), the second plan empty after one fix, then gated destroy with the hourly check passing on each root and every member account swept to zero billable resources. The first proof, 196 resources on 2026-10-15, stopped safely at 47 of 50 network resources on a defect | [ADR-0004](docs/adr/0004-gated-infra-pipeline.md) |
+| Ingress WAF | Clean request 200; path traversal, a Log4Shell header and an empty User-Agent 403; a burst blocked by the rate rule after about 180 requests. 237 log records reached the log-archive bucket from the network account, including real internet scanners blocked on `/.env` and by the IP reputation list within minutes of going live | [network/ingress.tf](network/ingress.tf) |
+| Root SCPs | IAM policy simulator against a dev Identity Center role, before and after. CloudTrail stop, delete, update and event-selector changes and the account public access block went from allowed to explicitly denied by the organization; the break-glass role stays allowed | [cis-mapping](docs/cis-mapping.md) |
+| Suspended OU | Sandbox moved into Suspended, an S3 list was denied by the deny-all SCP, moved back 16 seconds later with an empty accounts plan | [accounts/ous.tf](accounts/ous.tf) |
+| Account vending | Eight accounts moved from per-account resources to one map with `moved` blocks; the gated apply was 0 added, 0 changed, 0 destroyed | [accelerator-vs-bespoke](docs/accelerator-vs-bespoke.md) |
+| Org-wide Config | StackSet recorders in all seven target accounts, a management recorder, and the security account's organization aggregator reporting all nine accounts as succeeded | [terraform/config-org.tf](terraform/config-org.tf) |
 | Drift detection | A hand-edited Sandbox OU tag failed the daily run and opened issue [#40](https://github.com/jordann6/aws-landing-zone/issues/40) naming the OU and its changed attributes; reverting the tag closed it on the next run, about 3 minutes end to end | [Drift detection](#drift-detection) |
 | Guardrails and compute | 20/20 guardrail denials, hardened golden AMI after reboot, private management instance 17/17 | [compute-baseline](docs/compute-baseline.md) |
 | Secrets scanner | Cross-account scan of all members, positive control flagged, value reads explicitly denied | [secrets-lifecycle](docs/secrets-lifecycle.md) |
@@ -131,7 +189,10 @@ the earlier layers, and by CI behind reviewer gates for the infra pipeline.
 Not proven, stated plainly: a real
 reboot following real CPU load (only dry run so far), restore of a real backup,
 end-to-end firewall traffic, and a live listing of us-west-2 after the standby was
-destroyed (Terraform's destroy and empty state are the evidence).
+destroyed (Terraform's destroy and empty state are the evidence). Designed and
+not built: hybrid connectivity ([ADR-0006](docs/adr/0006-hybrid-connectivity.md)),
+external IdP federation ([access model](docs/access-model.md#external-identity-provider-production-design)),
+and the Firewall Manager policy.
 
 ## Companion repositories
 
@@ -162,12 +223,23 @@ backup is disabled; the standby uses a cross-region RDS replica.
 
 ## Account and policy boundaries
 
-Security, Infrastructure, Workloads and Sandbox OUs contain eight member accounts:
-security, network, shared-services, log-archive, dev, test, prod and sandbox.
-SCPs deny root use, leaving the organization, unapproved regions, public or
-unencrypted S3, and disabling detective services. The organization also supplies
-a tag policy. Member accounts inherit the applicable controls; the management
-account is exempt from SCPs and needs its own hardening.
+Six OUs sit under the root. Security, Infrastructure, Workloads and Sandbox hold
+eight member accounts: security, network, shared-services, log-archive, dev,
+test, prod and sandbox. Suspended carries a deny-all SCP and is where an account
+goes before it is closed. Deployments is for a CI/CD account, defined in the
+account map and off by default because the organization is one account short of
+its quota.
+
+The root holds five SCPs, the most AWS allows: FullAWSAccess, deny root use,
+deny leaving the organization, deny public S3, and deny disabling detective
+services, which also covers CloudTrail tampering and AWS Config. Every OU except
+Suspended adds the region lockdown, and Infrastructure and Workloads add S3
+encryption. The organization also supplies a tag policy. The management account
+is exempt from SCPs and needs its own hardening.
+
+Accounts are one `for_each` map in `accounts/accounts.tf`, so a new account is a
+new entry. [accelerator-vs-bespoke](docs/accelerator-vs-bespoke.md) maps that
+pattern to Account Factory for Terraform.
 
 Accounts carry `close_on_deletion = false` and `prevent_destroy`. Never close or
 suspend them as part of a demo teardown. Organizations, OUs, SCPs and idle accounts
@@ -179,11 +251,11 @@ the network does not disable sharing for future demos.
 
 | Root | Purpose | Lifecycle |
 |---|---|---|
-| `accounts/` | Organization, OUs, accounts, SCPs, tag policy and RAM organization onboarding | Permanent |
-| `bootstrap/` | Dedicated state backend, GitHub OIDC trust, management `gha-plan` and `gha-apply`, and their matching roles in network and prod | Retained, operator-applied |
-| `terraform/` | Audit, detective controls, identity and budgets | Retained baseline |
+| `accounts/` | Organization, OUs, the account map, SCPs, tag policy, delegated administrators and RAM organization onboarding | Permanent, gated (`org-apply`) |
+| `bootstrap/` | Dedicated state backend, GitHub OIDC trust, management `gha-plan` and `gha-apply`, and their matching roles in network, prod, security and log-archive | Retained, operator-applied |
+| `terraform/` | Audit, detective controls, org-wide Config and its aggregator, Firewall Manager, the WAF log bucket, identity and budgets | Retained baseline, gated (`org-apply`) |
 | `observability/` | CloudWatch OAM links, central alarms, the ops-alarms topic and security findings routing | Retained baseline |
-| `network/` | Shared TGW, inspection VPC, firewall, NAT, endpoints and network logs | Temporary, hourly billing |
+| `network/` | Shared TGW, inspection VPC, firewall, NAT, endpoints, network logs and the ingress edge (ALB, WAF, certificate, DNS) | Temporary, hourly billing |
 | `workload/` | Private prod VPC, EKS, RDS, backup, EC2 defaults, golden AMI pipeline and SSM patching | Temporary, hourly billing |
 | `delivery/` | release-guard support in prod: GitHub OIDC publish and promote roles, ECR repositories, the deployments table and IRSA roles | Temporary, destroyed first by `destroy.yml` |
 | `compute/` | Hardened management instance from the golden AMI, SSM-only access | Temporary, destroyed first |
@@ -212,7 +284,8 @@ not part of the completed Phase C demo.
 | Control | Implementation |
 |---|---|
 | Audit | Organization CloudTrail and Config delivery to encrypted S3; GOVERNANCE-mode Object Lock and trail validation |
-| Detection | GuardDuty delegation; optional Security Hub CIS AWS Foundations 1.4.0 integration; AWS Config |
+| Detection | GuardDuty delegation; optional Security Hub CIS AWS Foundations 1.4.0 integration; AWS Config in every account through a StackSet, with an organization aggregator in the security account |
+| Edge | WAF web ACL on the ingress load balancer, logging every request to log-archive; Firewall Manager administered from the security account, its policy in code and off |
 | Identity | Optional IAM Identity Center personas, permission boundaries and short sessions |
 | Encryption | Customer-managed KMS keys with rotation and scoped service policies |
 | Root use | Management password policy and EventBridge root-use alerting |
@@ -228,6 +301,12 @@ Gateway with the organization; prod attaches through explicit acceptance. Separa
 spoke and inspection route tables route internet egress and return traffic through
 Network Firewall and the hub NAT. The demo inspection path uses one availability
 zone and is not a production availability design.
+
+Two more public subnets, `10.0.50.0/24` and `10.0.51.0/24`, hold the ingress
+load balancer. It answers HTTPS at `lz-ingress.jordandesigns.io` with a fixed
+response, redirects HTTP, and has no targets, so nothing sits behind the edge.
+The certificate validates through the management account's hosted zone, where
+the CI role may change only that hostname's records.
 
 The source allowlist now defaults to AWS and Cognito domains. The prod source CIDR
 is included in firewall HOME_NET. Hub interface endpoints, an S3 gateway endpoint,
@@ -257,7 +336,8 @@ Design and the live proof are in [ADR-0004](docs/adr/0004-gated-infra-pipeline.m
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `guardrails.yml` | Pull request | Static gates on every root; credentialed plan for network, and for workload and delivery when their upstream state is live, using the read-only member `gha-plan` |
+| `guardrails.yml` | Pull request | Static gates on every root; credentialed plan for accounts, governance and network, and for workload and delivery when their upstream state is live, using the read-only `gha-plan` roles |
+| `apply-governance.yml` | Push to main on `accounts/` or `terraform/`, or dispatch | accounts then governance, each replaying its saved plan behind the `org-apply` environment, then a second plan that must be empty. Not tied to `HOURLY_STACK_ENABLED`, since these roots are persistent |
 | `apply.yml` | Push to main on those roots, or dispatch | Only when `HOURLY_STACK_ENABLED` is `true`. network, workload, delivery in order, each replaying its reviewed saved plan behind the `prod-apply` environment; then replans all three and fails if a second plan is not empty |
 | `destroy.yml` | Dispatch, main only | delivery, workload, network, each behind the `destroy` environment and followed by the hourly-resource check |
 | `ttl-guard.yml` | Hourly schedule, or dispatch | Read-only check that fails while network or workload holds anything hourly. Best effort: GitHub may delay or drop scheduled runs |
@@ -272,7 +352,7 @@ gh workflow run destroy.yml --repo jordann6/aws-landing-zone --ref main
 gh variable set HOURLY_STACK_ENABLED --repo jordann6/aws-landing-zone --body false
 ```
 
-The stack costs about $1.16 an hour and the workload apply takes about 28
+The stack costs about $1.20 an hour and the workload apply takes about 28
 minutes. Finish the teardown before 05:00 UTC, when the workload backup plan
 writes into a Vault Lock vault whose recovery points block its deletion for 7
 days. Check that vault for recovery points before dispatching the destroy.
@@ -384,17 +464,28 @@ policy enforcement is disabled because its example tagging rules conflict with
 the organization's tag policy. Pricing estimates still use the Infracost API.
 
 The credentialed plan, gated apply, gated destroy and TTL guard are live for the
-network, workload and delivery roots; see [Infra pipeline](#infra-pipeline). A
+network, workload and delivery roots, and the credentialed plan and gated apply
+for the accounts and governance roots; see [Infra pipeline](#infra-pipeline). A
 daily drift check runs on `accounts/`; see [Drift detection](#drift-detection). CI
 authenticates by GitHub OIDC with the immutable repository subject, into
 management `gha-plan` or `gha-apply`, which each chain into exactly one matching
-role in the member accounts. The accounts, governance, bootstrap and
-observability roots stay operator-applied, so CI can never rewrite its own trust.
+role in the member accounts. The bootstrap and observability roots stay
+operator-applied, and bootstrap owns the CI roles, so CI can never rewrite its
+own trust.
 
 ## What changes at production scale
 
 - **Control Tower and the Landing Zone Accelerator at the base,** keeping only
   the custom SCPs, the inspection design and the paved-road modules on top.
+  Account Factory for Terraform replaces the account map.
+- **An external identity provider.** Entra ID or Okta signs users in over SAML
+  and provisions groups into Identity Center over SCIM, with break-glass kept
+  outside it. [Access model](docs/access-model.md#external-identity-provider-production-design).
+- **Hybrid connectivity.** Direct Connect through a Direct Connect gateway on the
+  Transit Gateway, with a Site-to-Site VPN as failover and on-premises traffic
+  inspected by the same firewall. [ADR-0006](docs/adr/0006-hybrid-connectivity.md).
+- **Firewall Manager on,** so every load balancer in Workloads and
+  Infrastructure gets the baseline web ACL instead of one managed by hand.
 - **A multi-AZ inspection path.** The demo firewall and NAT sit in one
   availability zone.
 - **Separate reviewers.** One maintainer approves every gate here.
@@ -413,9 +504,10 @@ observability roots stay operator-applied, so CI can never rewrite its own trust
 - [Warm standby](docs/warm-standby-design.md): the us-west-2 design and cost gate, with the live result and teardown lessons.
 - [Compute baseline](docs/compute-baseline.md): guardrails, golden AMI, patching, management instance and their proofs.
 - [CIS mapping](docs/cis-mapping.md): controls mapped to resources and policies, with scope limitations.
-- [Access model](docs/access-model.md): personas, account scope and permissions.
+- [Access model](docs/access-model.md): personas, account scope and permissions, and the external IdP federation design.
 - [Data tier](docs/data-tier.md): segmentation, backup policy and availability design; proof limits are explicit.
 - [State backend decision](docs/adr/0003-dedicated-state-backend.md): dedicated, KMS-encrypted backend instead of the shared bucket.
-- [Gated infra pipeline](docs/adr/0004-gated-infra-pipeline.md): split plan and apply identities across accounts, reviewed-plan replay, second-plan check, the live proof and the two defects it caught.
+- [Gated infra pipeline](docs/adr/0004-gated-infra-pipeline.md): split plan and apply identities across accounts, reviewed-plan replay, second-plan check, the live proof and the two defects it caught, plus the addendum moving the governance roots behind the gate.
+- [Hybrid connectivity](docs/adr/0006-hybrid-connectivity.md): Direct Connect with VPN failover on the Transit Gateway, path preference, inspection and cost, designed and not built.
 - [Architecture decision](docs/accelerator-vs-bespoke.md): bespoke Terraform versus Control Tower and Landing Zone Accelerator.
 - [Overview diagram source](docs/overview.py) and [full diagram source](docs/diagram.py): official AWS icons via the mingrammer `diagrams` library. Regenerate with `python3 docs/diagram.py` after installing `diagrams` and Graphviz.
