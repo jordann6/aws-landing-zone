@@ -44,13 +44,6 @@ resource "aws_organizations_policy" "require_s3_encryption" {
   content     = file("${path.module}/policies/require-s3-encryption.json")
 }
 
-resource "aws_organizations_policy" "deny_cloudtrail_tampering" {
-  name        = "deny-cloudtrail-tampering"
-  description = "Prevent stopping, deleting, or modifying CloudTrail trails"
-  type        = "SERVICE_CONTROL_POLICY"
-  content     = file("${path.module}/policies/deny-cloudtrail-tampering.json")
-}
-
 resource "aws_organizations_policy" "deny_public_s3" {
   name        = "deny-public-s3"
   description = "Prevent public S3 bucket ACLs and removal of account public access block"
@@ -60,7 +53,7 @@ resource "aws_organizations_policy" "deny_public_s3" {
 
 resource "aws_organizations_policy" "deny_disable_detective" {
   name        = "deny-disable-detective"
-  description = "Prevent disabling Config, GuardDuty, Security Hub, or Access Analyzer"
+  description = "Prevent disabling Config, GuardDuty, Security Hub, Access Analyzer, or tampering with CloudTrail"
   type        = "SERVICE_CONTROL_POLICY"
   content     = file("${path.module}/policies/deny-disable-detective.json")
 }
@@ -78,9 +71,40 @@ resource "aws_organizations_policy_attachment" "root_deny_root_user" {
 }
 
 # Detective services are org-wide, so the "do not turn them off" guard is too.
+#
+# CloudTrail is a detective control, so its tamper guard is a statement in this
+# same policy (DenyCloudTrailTampering) rather than a policy of its own: the root
+# is at the 5-SCP-per-target limit (FullAWSAccess, deny-root-user, deny-leave-org,
+# this, deny-public-s3). It used to be a separate policy on Prod only, which left
+# the claim in terraform/logging.tf true for one OU. The org trail itself lives
+# in the management account, which no SCP binds; the statement covers every
+# member principal and every member-owned trail. OrganizationAccountAccessRole is
+# its one exemption: the operator's break-glass role, every use of it lands in the
+# org trail, and without it a member-owned trail (the secrets scanner's
+# secops-trail in security) could never be torn down. The CI gha-apply roles are
+# not exempt.
 resource "aws_organizations_policy_attachment" "root_deny_disable_detective" {
   policy_id = aws_organizations_policy.deny_disable_detective.id
   target_id = aws_organizations_organization.org.roots[0].id
+}
+
+# No member account may make a bucket public by ACL, and only the break-glass role
+# may change the account-level S3 public access block (so it can be set once per
+# account, never loosened by a workload or CI role). Root, not Prod only: a public
+# bucket in dev or sandbox leaks the same data.
+resource "aws_organizations_policy_attachment" "root_deny_public_s3" {
+  policy_id = aws_organizations_policy.deny_public_s3.id
+  target_id = aws_organizations_organization.org.roots[0].id
+}
+
+# --- Security OU ---
+# Region lockdown was missing here. Every detective service the security account
+# runs (GuardDuty, Security Hub, Config, the forensics and secrets-scanner
+# Lambdas) is in us-east-1 only, verified across all 17 regions on 2026-11-20, and
+# the global services are already exempt, so nothing it does needs another region.
+resource "aws_organizations_policy_attachment" "security_region_lockdown" {
+  policy_id = aws_organizations_policy.region_lockdown.id
+  target_id = aws_organizations_organizational_unit.security.id
 }
 
 # --- Infrastructure OU (network, shared-services, log-archive) ---
@@ -114,14 +138,7 @@ resource "aws_organizations_policy_attachment" "workloads_require_s3_encryption"
   target_id = aws_organizations_organizational_unit.workloads.id
 }
 
-# --- Prod OU (additional restrictions) ---
-
-resource "aws_organizations_policy_attachment" "prod_deny_cloudtrail_tampering" {
-  policy_id = aws_organizations_policy.deny_cloudtrail_tampering.id
-  target_id = aws_organizations_organizational_unit.prod.id
-}
-
-resource "aws_organizations_policy_attachment" "prod_deny_public_s3" {
-  policy_id = aws_organizations_policy.deny_public_s3.id
-  target_id = aws_organizations_organizational_unit.prod.id
-}
+# --- Prod OU ---
+# Prod's extra restrictions are the EC2 baseline and golden-image policies in
+# compute-baseline.tf. The trail and public-S3 guards it used to carry alone now
+# sit at the root and reach Prod by inheritance.

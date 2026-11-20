@@ -96,18 +96,25 @@ echo "$SANDBOX_POLICIES" | grep -q "region-lockdown" && \
   check "region-lockdown attached at Sandbox OU" "true" "true" || \
   check "region-lockdown attached at Sandbox OU" "true" "false"
 
-PROD_OU_ID="$(terraform output -raw prod_ou_id)"
-PROD_POLICIES="$(aws organizations list-policies-for-target \
-  --target-id "$PROD_OU_ID" --filter SERVICE_CONTROL_POLICY \
+echo "$ROOT_POLICIES" | grep -q "deny-disable-detective" && \
+  check "deny-disable-detective (incl. CloudTrail tamper statement) attached at root" "true" "true" || \
+  check "deny-disable-detective (incl. CloudTrail tamper statement) attached at root" "true" "false"
+
+echo "$ROOT_POLICIES" | grep -q "deny-public-s3" && \
+  check "deny-public-s3 attached at root" "true" "true" || \
+  check "deny-public-s3 attached at root" "true" "false"
+
+ROOT_SCP_COUNT="$(echo "$ROOT_POLICIES" | wc -w | tr -d ' ')"
+check "Root holds at most 5 SCPs (AWS per-target limit)" "true" "$([ "$ROOT_SCP_COUNT" -le 5 ] && echo true || echo false)"
+
+SECURITY_OU_ID="$(terraform output -raw security_ou_id)"
+SECURITY_POLICIES="$(aws organizations list-policies-for-target \
+  --target-id "$SECURITY_OU_ID" --filter SERVICE_CONTROL_POLICY \
   --query 'Policies[].Name' --output text)"
 
-echo "$PROD_POLICIES" | grep -q "deny-cloudtrail-tampering" && \
-  check "deny-cloudtrail-tampering attached at Prod OU" "true" "true" || \
-  check "deny-cloudtrail-tampering attached at Prod OU" "true" "false"
-
-echo "$PROD_POLICIES" | grep -q "deny-public-s3" && \
-  check "deny-public-s3 attached at Prod OU" "true" "true" || \
-  check "deny-public-s3 attached at Prod OU" "true" "false"
+echo "$SECURITY_POLICIES" | grep -q "region-lockdown" && \
+  check "region-lockdown attached at Security OU" "true" "true" || \
+  check "region-lockdown attached at Security OU" "true" "false"
 
 # ============================================================
 echo -e "\n[3/7] Verifying Member Account Placement..."
@@ -166,22 +173,32 @@ RESULT="$(aws sts get-caller-identity --region us-east-1 --query 'Account' --out
 clear_role
 
 # ============================================================
-echo -e "\n[6/7] Testing CloudTrail Tampering Deny (Prod Account)..."
+echo -e "\n[6/7] Testing CloudTrail Tampering + Public Access Block Deny (Dev Account)..."
 # ============================================================
+# This script runs as OrganizationAccountAccessRole, which is the break-glass
+# exemption in both statements, so calling StopLogging here would prove nothing.
+# The IAM policy simulator evaluates the SCPs for a NON-exempt principal (an
+# Identity Center persona role in dev) without changing anything, and reports the
+# Organizations layer separately from the role's own IAM policies.
 
-assume_role "$PROD_ACCOUNT_ID"
+assume_role "$DEV_ACCOUNT_ID"
 
-RESULT="$(aws cloudtrail stop-logging --name fake-trail --region us-east-1 2>&1)" && \
-  check "Prod: CloudTrail StopLogging denied" "denied" "allowed" || \
-  { echo "$RESULT" | grep -q "AccessDenied\|AccessDeniedException\|AuthorizationError\|explicit deny" && \
-    check "Prod: CloudTrail StopLogging denied" "denied" "denied" || \
-    check "Prod: CloudTrail StopLogging denied" "denied" "error: $RESULT"; }
+PERSONA_ROLE="$(aws iam list-roles \
+  --query "Roles[?starts_with(RoleName,'AWSReservedSSO_platform-eng_')].RoleName | [0]" --output text)"
 
-RESULT="$(aws cloudtrail delete-trail --name fake-trail --region us-east-1 2>&1)" && \
-  check "Prod: CloudTrail DeleteTrail denied" "denied" "allowed" || \
-  { echo "$RESULT" | grep -q "AccessDenied\|AccessDeniedException\|AuthorizationError\|explicit deny" && \
-    check "Prod: CloudTrail DeleteTrail denied" "denied" "denied" || \
-    check "Prod: CloudTrail DeleteTrail denied" "denied" "error: $RESULT"; }
+for action in cloudtrail:StopLogging cloudtrail:DeleteTrail cloudtrail:UpdateTrail cloudtrail:PutEventSelectors s3:PutAccountPublicAccessBlock; do
+  ORG_ALLOWED="$(aws iam simulate-principal-policy \
+    --policy-source-arn "arn:aws:iam::${DEV_ACCOUNT_ID}:role/${PERSONA_ROLE}" \
+    --action-names "$action" \
+    --query 'EvaluationResults[0].OrganizationsDecisionDetail.AllowedByOrganizations' --output text 2>&1)"
+  check "Dev persona: $action denied by SCP" "False" "$ORG_ALLOWED"
+done
+
+ORG_ALLOWED="$(aws iam simulate-principal-policy \
+  --policy-source-arn "arn:aws:iam::${DEV_ACCOUNT_ID}:role/OrganizationAccountAccessRole" \
+  --action-names cloudtrail:DeleteTrail \
+  --query 'EvaluationResults[0].OrganizationsDecisionDetail.AllowedByOrganizations' --output text 2>&1)"
+check "Dev break-glass role: cloudtrail:DeleteTrail exempt" "True" "$ORG_ALLOWED"
 
 clear_role
 

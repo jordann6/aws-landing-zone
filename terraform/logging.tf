@@ -1,6 +1,7 @@
 # Organization CloudTrail delivered to an immutable bucket in the log-archive
 # account. Every account in the org writes here; nothing in the org can read or
-# tamper with it (the deny-cloudtrail-tampering SCP plus Object Lock). This is the
+# tamper with it (the DenyCloudTrailTampering statement in the root deny-disable-detective SCP,
+# plus Object Lock). This is the
 # record you reach for after an incident, so it must survive the account that
 # generated it being compromised.
 

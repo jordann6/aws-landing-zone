@@ -17,10 +17,15 @@
       }
     },
     {
-      "Sid": "DenyRemovingAccountPublicAccessBlock",
+      "Sid": "AccountPublicAccessBlockIsBreakGlassOnly",
       "Effect": "Deny",
       "Action": "s3:PutAccountPublicAccessBlock",
-      "Resource": "*"
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::*:role/OrganizationAccountAccessRole"
+        }
+      }
     }
   ]
 }
