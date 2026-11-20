@@ -19,6 +19,7 @@ variable "cost_center" {
 variable "budget_notification_email" {
   description = "Email that receives budget and cost-anomaly alerts. Set in terraform.tfvars (gitignored)."
   type        = string
+  sensitive   = true
 }
 
 variable "monthly_budget_limit" {
@@ -59,7 +60,8 @@ variable "operator_user" {
     family_name = string
     email       = string
   })
-  default = null
+  default   = null
+  sensitive = true
 }
 
 # --- Reduced-footprint toggles -----------------------------------------------

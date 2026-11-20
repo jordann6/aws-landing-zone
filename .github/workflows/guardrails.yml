@@ -273,3 +273,38 @@ jobs:
       aws_region: us-east-1
       enable_infracost: false
       guardrails_ref: 6b716834c69634d4fcd050f440ea5f2c7b52c397
+
+  # The persistent roots (ADR-0004 addendum). Neither depends on hourly state, so
+  # both plan on every pull request. Their required variables come from the same
+  # secrets apply-governance.yml uses; the roots mark those values sensitive.
+  plan_accounts:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@03d67c120c0c6cc3a98c51d983c0a17bd5946e6e # v1.11.0
+    with:
+      terraform_dir: accounts
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      aws_region: us-east-1
+      enable_infracost: false
+      guardrails_ref: 03d67c120c0c6cc3a98c51d983c0a17bd5946e6e
+    secrets:
+      TF_VARS: ${{ secrets.ACCOUNTS_TFVARS }}
+
+  plan_governance:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: jordann6/platform-guardrails/.github/workflows/tf-plan.yml@03d67c120c0c6cc3a98c51d983c0a17bd5946e6e # v1.11.0
+    with:
+      terraform_dir: terraform
+      aws_role_arn: arn:aws:iam::692859913278:role/gha-plan
+      aws_region: us-east-1
+      enable_infracost: false
+      guardrails_ref: 03d67c120c0c6cc3a98c51d983c0a17bd5946e6e
+    secrets:
+      TF_VARS: ${{ secrets.GOVERNANCE_TFVARS }}

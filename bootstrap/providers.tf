@@ -82,3 +82,41 @@ provider "aws" {
     }
   }
 }
+
+provider "aws" {
+  alias  = "security"
+  region = var.region
+
+  assume_role {
+    role_arn = "arn:aws:iam::${local.member_accounts.security}:role/OrganizationAccountAccessRole"
+  }
+
+  default_tags {
+    tags = {
+      Project     = "aws-landing-zone"
+      Environment = "security"
+      Owner       = "jordan"
+      ManagedBy   = "terraform"
+      CostCenter  = "cc-0001"
+    }
+  }
+}
+
+provider "aws" {
+  alias  = "log_archive"
+  region = var.region
+
+  assume_role {
+    role_arn = "arn:aws:iam::${local.member_accounts.log_archive}:role/OrganizationAccountAccessRole"
+  }
+
+  default_tags {
+    tags = {
+      Project     = "aws-landing-zone"
+      Environment = "log-archive"
+      Owner       = "jordan"
+      ManagedBy   = "terraform"
+      CostCenter  = "cc-0001"
+    }
+  }
+}
