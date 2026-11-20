@@ -97,9 +97,10 @@ detective finding, so where both are possible this zone denies.
 | `deny-root-user`, `deny-leave-org` | Root | Applies to every member account without exception |
 | `deny-disable-detective` (Config, GuardDuty, Security Hub, Access Analyzer, CloudTrail tampering) | Root | The detective services and the org trail are org-wide, so the guard is too. The CloudTrail statement exempts only `OrganizationAccountAccessRole`, the operator break-glass role, so a member-owned trail (the secrets scanner's `secops-trail`) can still be torn down. CI roles are not exempt |
 | `deny-public-s3` | Root | A public bucket leaks the same data from dev or sandbox as from prod. The account-level public access block statement exempts the break-glass role so the block can be set once per account |
-| `region-lockdown` | Security, Infrastructure, Sandbox, Workloads | Every OU with member accounts. Security was missing it until 2026-11-20; all of its services run in us-east-1 (checked across all 17 regions) |
+| `region-lockdown` | Security, Infrastructure, Sandbox, Workloads, Deployments | Every OU with member accounts. Security was missing it until 2026-11-20; all of its services run in us-east-1 (checked across all 17 regions) |
 | `require-s3-encryption` | Infrastructure, Workloads | The OUs that hold the platform's data. Not yet on Security or Sandbox: S3 has encrypted every new object by default since 2023, so the SCP's job is forcing an explicit KMS header, and widening it means first checking every writer in those accounts sends one (the backup-verify heartbeat needed exactly that fix). Open item |
 | `require-imdsv2`, `require-encrypted-ebs` | Sandbox, Workloads | The OUs that run EC2 |
+| `deny-all` | Suspended | Account lifecycle. Moving an account here freezes every principal in it before closure; CloseAccount runs from the management account, which no SCP binds |
 
 The root is at the AWS limit of 5 SCPs per target (`FullAWSAccess` plus four),
 which is why the CloudTrail guard is a statement inside `deny-disable-detective`

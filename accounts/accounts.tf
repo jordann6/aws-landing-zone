@@ -4,6 +4,10 @@
 # close_on_deletion = false: closing an account leaves it SUSPENDED for 90 days,
 # still counted against the org account quota and still holding its email alias,
 # so a redeploy collides with it. Idle accounts cost nothing.
+#
+# Retiring an account is therefore a two-step, by hand: move it to the Suspended
+# OU (ous.tf), whose deny-all SCP freezes it immediately, then CloseAccount from
+# the management account. Its block here is removed only after the 90 days.
 # prevent_destroy: with close_on_deletion off, a destroy would try to remove the
 # account from the org instead, which fails without standalone billing. Refusing
 # the plan up front is the honest behavior.

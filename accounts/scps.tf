@@ -51,6 +51,13 @@ resource "aws_organizations_policy" "deny_public_s3" {
   content     = file("${path.module}/policies/deny-public-s3.json")
 }
 
+resource "aws_organizations_policy" "deny_all" {
+  name        = "deny-all"
+  description = "Freeze every principal in an account awaiting closure (Suspended OU only)"
+  type        = "SERVICE_CONTROL_POLICY"
+  content     = file("${path.module}/policies/deny-all.json")
+}
+
 resource "aws_organizations_policy" "deny_disable_detective" {
   name        = "deny-disable-detective"
   description = "Prevent disabling Config, GuardDuty, Security Hub, Access Analyzer, or tampering with CloudTrail"
@@ -142,3 +149,19 @@ resource "aws_organizations_policy_attachment" "workloads_require_s3_encryption"
 # Prod's extra restrictions are the EC2 baseline and golden-image policies in
 # compute-baseline.tf. The trail and public-S3 guards it used to carry alone now
 # sit at the root and reach Prod by inheritance.
+
+# --- Suspended OU ---
+# Deny-all, attached here and nowhere else. Moving an account in is the freeze;
+# moving it out (a management-account action) reverses it.
+resource "aws_organizations_policy_attachment" "suspended_deny_all" {
+  policy_id = aws_organizations_policy.deny_all.id
+  target_id = aws_organizations_organizational_unit.suspended.id
+}
+
+# --- Deployments OU ---
+# Empty today; any CI account placed here is region-locked like every other OU
+# with member accounts.
+resource "aws_organizations_policy_attachment" "deployments_region_lockdown" {
+  policy_id = aws_organizations_policy.region_lockdown.id
+  target_id = aws_organizations_organizational_unit.deployments.id
+}

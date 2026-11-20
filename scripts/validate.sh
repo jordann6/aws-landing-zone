@@ -62,7 +62,7 @@ echo -e "\n[1/7] Verifying Organization Structure..."
 OU_COUNT="$(aws organizations list-organizational-units-for-parent \
   --parent-id "$(terraform output -raw organization_root_id)" \
   --query 'length(OrganizationalUnits)' --output text)"
-check "Root has 4 top-level OUs (Security, Infrastructure, Sandbox, Workloads)" "4" "$OU_COUNT"
+check "Root has 6 top-level OUs (Security, Infrastructure, Sandbox, Workloads, Suspended, Deployments)" "6" "$OU_COUNT"
 
 WORKLOADS_OU_ID="$(terraform output -raw workloads_ou_id)"
 CHILD_COUNT="$(aws organizations list-organizational-units-for-parent \
@@ -115,6 +115,15 @@ SECURITY_POLICIES="$(aws organizations list-policies-for-target \
 echo "$SECURITY_POLICIES" | grep -q "region-lockdown" && \
   check "region-lockdown attached at Security OU" "true" "true" || \
   check "region-lockdown attached at Security OU" "true" "false"
+
+SUSPENDED_OU_ID="$(terraform output -raw suspended_ou_id)"
+SUSPENDED_POLICIES="$(aws organizations list-policies-for-target \
+  --target-id "$SUSPENDED_OU_ID" --filter SERVICE_CONTROL_POLICY \
+  --query 'Policies[].Name' --output text)"
+
+echo "$SUSPENDED_POLICIES" | grep -q "deny-all" && \
+  check "deny-all attached at Suspended OU" "true" "true" || \
+  check "deny-all attached at Suspended OU" "true" "false"
 
 # ============================================================
 echo -e "\n[3/7] Verifying Member Account Placement..."
