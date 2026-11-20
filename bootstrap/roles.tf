@@ -135,8 +135,21 @@ data "aws_iam_policy_document" "plan_permissions" {
       # name and its ACM validation record.
       "route53:GetHostedZone", "route53:ListHostedZones", "route53:ListHostedZonesByName",
       "route53:ListResourceRecordSets", "route53:GetChange", "route53:ListTagsForResource",
+      # Step 5: the member-recorder StackSet, the management Config recorder and
+      # the Firewall Manager admin association (terraform/config-org.tf, fms.tf).
+      "cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplate*",
+      "config:Describe*", "config:Get*", "config:List*",
+      "fms:GetAdminAccount", "fms:ListAdminAccountsForOrganization", "fms:ListTagsForResource",
     ]
     resources = ["*"]
+  }
+  statement {
+    sid = "ReadManagementConfigRole"
+    actions = [
+      "iam:GetRole", "iam:GetRolePolicy", "iam:ListRolePolicies",
+      "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole",
+    ]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/lz-config-recorder"]
   }
   statement {
     sid       = "ChainToMemberPlanRoles"
@@ -265,6 +278,43 @@ data "aws_iam_policy_document" "apply_permissions" {
       test     = "ForAllValues:StringLike"
       variable = "route53:ChangeResourceRecordSetsNormalizedRecordNames"
       values   = [var.ingress_hostname, "_*.${var.ingress_hostname}"]
+    }
+  }
+  # Step 5 writes in the management account: the member-recorder StackSet, the
+  # management Config recorder and its one role, and the FMS admin association.
+  statement {
+    sid = "ManageOrgConfigAndFms"
+    actions = [
+      "cloudformation:CreateStackSet", "cloudformation:UpdateStackSet", "cloudformation:DeleteStackSet",
+      "cloudformation:CreateStackInstances", "cloudformation:UpdateStackInstances", "cloudformation:DeleteStackInstances",
+      "cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplate*",
+      "cloudformation:TagResource", "cloudformation:UntagResource",
+      "config:PutConfigurationRecorder", "config:PutDeliveryChannel", "config:StartConfigurationRecorder",
+      "config:StopConfigurationRecorder", "config:DeleteConfigurationRecorder", "config:DeleteDeliveryChannel",
+      "config:Describe*", "config:Get*", "config:List*",
+      "fms:AssociateAdminAccount", "fms:DisassociateAdminAccount", "fms:GetAdminAccount",
+      "fms:ListAdminAccountsForOrganization",
+    ]
+    resources = ["*"]
+  }
+  statement {
+    sid = "ManageManagementConfigRole"
+    actions = [
+      "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:UpdateAssumeRolePolicy",
+      "iam:PutRolePolicy", "iam:DeleteRolePolicy", "iam:GetRolePolicy", "iam:ListRolePolicies",
+      "iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:ListAttachedRolePolicies",
+      "iam:ListInstanceProfilesForRole", "iam:TagRole", "iam:UntagRole",
+    ]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/lz-config-recorder"]
+  }
+  statement {
+    sid       = "PassConfigRoleToConfig"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/lz-config-recorder"]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["config.amazonaws.com"]
     }
   }
   # The CI role never schedules a key for deletion or hands the trail key away;
