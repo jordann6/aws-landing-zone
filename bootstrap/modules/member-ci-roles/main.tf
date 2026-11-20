@@ -66,7 +66,6 @@ data "aws_iam_policy_document" "plan_no_data" {
       "dynamodb:Query",
       "dynamodb:Scan",
       "secretsmanager:GetSecretValue",
-      "kms:Decrypt",
       "ecr:BatchGetImage",
       "ecr:GetDownloadUrlForLayer",
       "logs:GetLogEvents",
@@ -74,6 +73,45 @@ data "aws_iam_policy_document" "plan_no_data" {
     ]
     resources = ["*"]
   }
+
+  # Decrypt stays denied everywhere except through Lambda. Lambda decrypts a
+  # function's environment with the caller's permissions, so a blanket deny left
+  # every plan seeing the variables as empty and re-adding them: a perpetual diff
+  # that failed "Second plan is empty" on the first bring-up with the rotation
+  # functions (2026-11-20). Function environments here hold endpoints and ARNs;
+  # secret values live in Secrets Manager, whose GetSecretValue stays denied.
+  statement {
+    sid       = "DenyDecryptOutsideLambda"
+    effect    = "Deny"
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
+    condition {
+      test     = "StringNotLike"
+      variable = "kms:ViaService"
+      values   = ["lambda.*.amazonaws.com"]
+    }
+  }
+}
+
+# ReadOnlyAccess grants no kms:Decrypt, which a function using a customer key
+# needs for its environment to be read. Granted only through Lambda.
+data "aws_iam_policy_document" "plan_lambda_env" {
+  statement {
+    sid       = "ReadLambdaEnvironment"
+    actions   = ["kms:Decrypt"]
+    resources = ["*"]
+    condition {
+      test     = "StringLike"
+      variable = "kms:ViaService"
+      values   = ["lambda.*.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "plan_lambda_env" {
+  name   = "read-lambda-environment"
+  role   = aws_iam_role.plan.id
+  policy = data.aws_iam_policy_document.plan_lambda_env.json
 }
 
 resource "aws_iam_role_policy" "plan_no_data" {
