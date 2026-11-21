@@ -127,6 +127,27 @@ closed again before verification; see [warm-standby-design.md](warm-standby-desi
 Open and not done: confirming the security-findings SNS subscription, the Claude summary
 path (built, unproven, Bedrock entitlement), and retiring the old gateway provider keys.
 
+## 2026-11-20 proof session (ingress, governance gaps)
+
+Brought up by `apply.yml` run 44830717093: network 65 (including 15 ingress
+resources), workload 128 and delivery 30, each through the `prod-apply` gate. The
+empty-second-plan check failed on the rotation Lambdas' environment, a read-only
+refresh that could not decrypt it. After the plan-role fix, run 44835926775
+planned all three roots empty.
+
+The WAF proof ran against `lz-ingress.jordandesigns.io` while the stack was up;
+results are in the README's proven table. Torn down by `destroy.yml` run
+44836310934 (delivery, workload, network, each with the hourly check passing).
+A live sweep of all eight member accounts then found no load balancers, web
+ACLs, Elastic IPs, NAT gateways, instances, EKS clusters, RDS instances,
+firewalls, transit gateways, interface endpoints or VPN connections, and the
+ingress DNS records were gone from the hosted zone. `HOURLY_STACK_ENABLED` was
+set back to false.
+
+Left standing by design: the WAF log bucket and its records, the StackSet
+recorders, the management recorder, the organization aggregator and the
+Firewall Manager admin association, all free or close to it.
+
 ## Phase C closeout notes (moved from the README)
 
 Before teardown, Phase C verification recorded **50 network resources and 85

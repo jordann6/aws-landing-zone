@@ -10,15 +10,17 @@ from pathlib import Path
 from diagrams import Cluster, Diagram, Edge
 from diagrams.aws.compute import EKS
 from diagrams.aws.database import RDS
-from diagrams.aws.management import Cloudtrail, Organizations
-from diagrams.aws.network import InternetGateway, NATGateway, NetworkFirewall, TransitGateway
-from diagrams.aws.security import Guardduty
+from diagrams.aws.management import Cloudtrail, Config, Organizations
+from diagrams.aws.network import ElbApplicationLoadBalancer, InternetGateway, NATGateway, NetworkFirewall, TransitGateway
+from diagrams.aws.security import WAF, Guardduty
 from diagrams.aws.storage import S3
 from diagrams.onprem.ci import GithubActions
+from diagrams.onprem.client import Users
 
 RETAINED = {"bgcolor": "#eef6ff", "color": "#7299bd", "fontsize": "15"}
 TEMPORARY = {"bgcolor": "#fff4e7", "color": "#d49447", "fontsize": "15"}
 EGRESS = "#ac6413"
+INGRESS = "#2e7d32"
 
 with Diagram(
     "AWS Landing Zone | overview",
@@ -31,10 +33,11 @@ with Diagram(
     ci = GithubActions("Gated pipeline\nread-only plan on PR\nreviewed apply / destroy")
 
     with Cluster("Retained | management, security, log-archive", graph_attr=RETAINED):
-        org = Organizations("Organization\n8 accounts, SCPs")
+        org = Organizations("Organization\n8 accounts, 6 OUs\nSCPs at the root")
         trail = Cloudtrail("Org trail")
-        logs = S3("Object Lock\nlog archive")
+        logs = S3("Log archive\ntrail, Config\nWAF logs")
         gd = Guardduty("GuardDuty\ndelegated admin")
+        cfg = Config("Config aggregator\nall 9 accounts")
 
     with Cluster("Temporary | prod account, no NAT or IGW", graph_attr=TEMPORARY):
         eks = EKS("Private EKS")
@@ -45,10 +48,15 @@ with Diagram(
         fw = NetworkFirewall("Network Firewall\ndomain allowlist")
         nat = NATGateway("Hub NAT")
         igw = InternetGateway("Internet")
+        waf = WAF("WAF web ACL\nmanaged rules\n+ rate limit")
+        alb = ElbApplicationLoadBalancer("Ingress ALB\nTLS 1.3, DMZ subnets")
 
     ci >> Edge(label="builds, then destroys") >> eks
     trail >> logs
     org - trail
     org - gd
+    org - cfg
     eks >> db
     eks >> Edge(color=EGRESS) >> tgw >> Edge(color=EGRESS) >> fw >> Edge(color=EGRESS) >> nat >> Edge(color=EGRESS) >> igw
+    clients = Users("Internet clients")
+    clients >> Edge(color=INGRESS, label="HTTPS in") >> waf >> Edge(color=INGRESS) >> alb
